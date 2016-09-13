@@ -6,6 +6,9 @@ compiler:
   - gcc
   - clang
 
+services:
+  - docker
+
 env:
   global:
     - PATH=/usr/local/bin:$PATH

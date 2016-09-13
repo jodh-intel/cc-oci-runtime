@@ -188,4 +188,28 @@ sudo chown -R $USER /usr/share/clear-containers/
 # create image symlink (kernel will already have one)
 (cd /usr/share/clear-containers && sudo ln -s "${clr_image}" clear-containers.img)
 
+mkdir docker
+pushd docker
+
+# create an ubuntu container
+sudo docker run ubuntu true
+
+# flatten the just-created ubuntu container
+sudo docker export $(sudo docker ps -n 1 -q) | sudo docker import - cc-test-image
+
+# export the container as a tar file
+sudo docker save cc-test-image > cc-test-image.tar
+
+# extra the container files
+tar xvf cc-test-image.tar
+
+# find the filesystem layer
+# (only 1 layer as the image has been flattened)
+fs=$(find . -name layer.tar)
+
+# extract container image
+mkdir -p /tmp/bundle/rootfs
+sudo tar -C /tmp/bundle/rootfs -xvf "$fs"
+popd
+
 popd
