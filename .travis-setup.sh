@@ -33,7 +33,8 @@ gnome_dl=https://download.gnome.org/sources
 # glib, json-glib, libmnl-dev check and cc-oci-runtime
 sudo apt-get -qq install valgrind lcov uuid-dev pkg-config \
   zlib1g-dev libffi-dev gettext libpcre3-dev cppcheck \
-  libmnl-dev
+  libmnl-dev libcap-ng-dev libgmp-dev libmpfr-dev libmpc-dev \
+  libpixman-1-dev
 
 mkdir cor-dependencies
 pushd cor-dependencies
@@ -76,6 +77,70 @@ popd
 git clone https://github.com/sstephenson/bats.git
 pushd bats
 sudo ./install.sh /usr/local
+popd
+
+# build gcc (required for qemu-lite)
+curl -L -O "http://mirrors.kernel.org/gnu/gcc/gcc-${gcc_version}/gcc-${gcc_version}.tar.bz2"
+tar xvf "gcc-${gcc_version}.tar.bz2"
+pushd "gcc-${gcc_version}"
+./configure --enable-languages=c --disable-multilib --prefix="/usr/local/gcc-${gcc_version}"
+make -j5
+sudo make install
+export PATH="/usr/local/gcc-${gcc_version}:$PATH"
+popd
+
+# build qemu-lite
+curl -L -O "https://github.com/01org/qemu-lite/archive/${qemu_lite_version}.tar.gz"
+tar xvf "${qemu_lite_version}.tar.gz"
+pushd "qemu-lite-${qemu_lite_version}"
+CC="gcc" ./configure \
+    --disable-bluez \
+    --disable-brlapi \
+    --disable-bzip2 \
+    --disable-curl \
+    --disable-curses \
+    --disable-debug-tcg \
+    --disable-fdt \
+    --disable-glusterfs \
+    --disable-gtk \
+    --disable-libiscsi \
+    --disable-libnfs \
+    --disable-libssh2 \
+    --disable-libusb \
+    --disable-linux-aio \
+    --disable-lzo \
+    --disable-opengl \
+    --disable-qom-cast-debug \
+    --disable-rbd \
+    --disable-rdma \
+    --disable-sdl \
+    --disable-seccomp \
+    --disable-slirp \
+    --disable-snappy \
+    --disable-spice \
+    --disable-strip \
+    --disable-tcg-interpreter \
+    --disable-tcmalloc \
+    --disable-tools \
+    --disable-tpm \
+    --disable-usb-redir \
+    --disable-uuid \
+    --disable-vnc \
+    --disable-vnc-{jpeg,png,sasl} \
+    --disable-vte \
+    --disable-xen \
+    --enable-attr \
+    --enable-cap-ng \
+    --enable-kvm \
+    --enable-virtfs \
+    --target-list=x86_64-softmmu \
+    --extra-cflags="-fno-semantic-interposition -O3 -falign-functions=32" \
+    --prefix=/usr/local \
+    --datadir=/usr/local/share/qemu-lite \
+    --libdir=/usr/local/lib64/qemu-lite \
+    --libexecdir=/usr/local/libexec/qemu-lite
+make -j5
+sudo make install
 popd
 
 popd
