@@ -34,7 +34,7 @@ gnome_dl=https://download.gnome.org/sources
 sudo apt-get -qq install valgrind lcov uuid-dev pkg-config \
   zlib1g-dev libffi-dev gettext libpcre3-dev cppcheck \
   libmnl-dev libcap-ng-dev libgmp-dev libmpfr-dev libmpc-dev \
-  libpixman-1-dev
+  libpixman-1-dev rpm2cpio
 
 mkdir cor-dependencies
 pushd cor-dependencies
@@ -142,5 +142,50 @@ CC="gcc" ./configure \
 make -j5
 sudo make install
 popd
+
+# install kernel + Clear Containers image
+mkdir artifacts
+pushd artifacts
+clr_release=$(curl -L https://download.clearlinux.org/latest)
+clr_kernel_base_url="https://download.clearlinux.org/releases/${clr_release}/clear/x86_64/os/Packages"
+sudo mkdir -p /usr/share/clear-containers/
+
+# find newest containers kernel
+kernel=$(curl -l -s -L "${clr_kernel_base_url}" |\
+    grep -o "linux-container-[0-9][0-9.-]*\.x86_64.rpm" |\
+    sort -u)
+
+# download kernel
+curl -L -O "${clr_kernel_base_url}/${kernel}"
+
+# install kernel
+# (note: cpio on trusty does not support "-D")
+rpm2cpio "$kernel"| (cd / && sudo cpio -idv)
+
+# download image
+clr_image_url="https://download.clearlinux.org/current/clear-${clr_release}-containers.img.xz"
+clr_image=$(basename "$clr_image_url")
+for file in "${clr_image_url}-SHA512SUMS" "${clr_image_url}"
+do
+    curl -L -O "$file"
+done
+
+# verify image
+sha512sum -c "${clr_image}-SHA512SUMS"
+
+# unpack image
+unxz "${clr_image}"
+
+# remove suffix
+clr_image=${clr_image/.xz/}
+
+# install image
+sudo install "${clr_image}" /usr/share/clear-containers/
+
+# change kernel+image ownership
+sudo chown -R $USER /usr/share/clear-containers/
+
+# create image symlink (kernel will already have one)
+(cd /usr/share/clear-containers && sudo ln -s "${clr_image}" clear-containers.img)
 
 popd
