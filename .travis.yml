@@ -9,6 +9,10 @@ compiler:
 services:
   - docker
 
+cache:
+  directories:
+    - /usr/local
+
 env:
   global:
     - PATH=/usr/local/bin:$PATH
