@@ -43,7 +43,7 @@ pushd cor-dependencies
 glib_major=`echo $glib_version | cut -d. -f1`
 glib_minor=`echo $glib_version | cut -d. -f2`
 curl -L -O "$gnome_dl/glib/${glib_major}.${glib_minor}/glib-${glib_version}.tar.xz"
-tar -xvf "glib-${glib_version}.tar.xz"
+tar -xf "glib-${glib_version}.tar.xz"
 pushd "glib-${glib_version}"
 ./configure --disable-silent-rules
 make -j5
@@ -54,7 +54,7 @@ popd
 json_major=`echo $json_glib_version | cut -d. -f1`
 json_minor=`echo $json_glib_version | cut -d. -f2`
 curl -L -O "$gnome_dl/json-glib/${json_major}.${json_minor}/json-glib-${json_glib_version}.tar.xz"
-tar -xvf "json-glib-${json_glib_version}.tar.xz"
+tar -xf "json-glib-${json_glib_version}.tar.xz"
 pushd "json-glib-${json_glib_version}"
 ./configure --disable-silent-rules
 make -j5
@@ -65,7 +65,7 @@ popd
 # We need to build check as the check version in the OS used by travis isn't
 # -pedantic safe.
 curl -L -O "https://github.com/libcheck/check/releases/download/${check_version}/check-${check_version}.tar.gz"
-tar -xvf "check-${check_version}.tar.gz"
+tar -xf "check-${check_version}.tar.gz"
 pushd "check-${check_version}"
 ./configure
 make -j5
@@ -81,7 +81,7 @@ popd
 
 # build gcc (required for qemu-lite)
 curl -L -O "http://mirrors.kernel.org/gnu/gcc/gcc-${gcc_version}/gcc-${gcc_version}.tar.bz2"
-tar xvf "gcc-${gcc_version}.tar.bz2"
+tar xf "gcc-${gcc_version}.tar.bz2"
 pushd "gcc-${gcc_version}"
 ./configure --enable-languages=c --disable-multilib --prefix="/usr/local/gcc-${gcc_version}"
 make -j5
@@ -91,7 +91,7 @@ popd
 
 # build qemu-lite
 curl -L -O "https://github.com/01org/qemu-lite/archive/${qemu_lite_version}.tar.gz"
-tar xvf "${qemu_lite_version}.tar.gz"
+tar xf "${qemu_lite_version}.tar.gz"
 pushd "qemu-lite-${qemu_lite_version}"
 CC="gcc" ./configure \
     --disable-bluez \
