@@ -17,15 +17,87 @@
 #  along with this program; if not, write to the Free Software
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+# Build runtime dependencies.
+#
+# Strategy:
+#
+# Travis expects a job to produce output. If it doesn't see any output
+# for a few minutes the job will be failed. But Travis also has a
+# restriction on the maximum amount of output a job can produce
+# (currently 4MB).
+#
+# This causes a problem since some of these dependencies (particularly
+# gcc) produce a lot of output *and* take a long time to build.
+#
+# To try to counter this, the builds are run through "pv" which outputs a
+# few bytes of status every minute to keep Travis happy, but avoids the
+# builds getting flooded with output. Since piping a command to "pv"
+# means the shell cannot provide the exit code of the piped command, the
+# strategy is to run commands that will produce a lot of output using
+# the run_cmd() function which runs the command in the background and
+# then connects pv to the command to monitor output.
+
 set -e -x
+
+# Run a command line, redirecting all output to a logfile.
+# If the command fails, display the end of the logfile.
+#
+# Arguments:
+#
+# 1: command line to execute
+# 2: logfile to redirect command output to
+run_cmd()
+{
+    local cmd="$1"
+    local logfile="$2"
+    local pid
+
+    eval "$cmd" > "$logfile" 2>&1 &
+    pid=$!
+
+    # connect to pid and show data progress every minute
+    # (Note: "|| :" in case the pid exits before pv starts).
+    pv -i 60 -d "$pid" || :
+
+    # get the return code of the background process
+    { wait "$pid"; ret=$?; } || :
+
+    [ $ret -eq 0 ] && return 0
+
+    tail -n 100 "${logfile}"
+
+    # fail the job
+    return 1
+}
 
 cwd=$(cd `dirname "$0"`; pwd -P)
 
+# Contains the latest build dependency versions.
 local_versions="$cwd/versions.txt"
+
+# Contains the cached build dependency versions.
+#
+# Note that a better approach might be to run "pkg-config
+# --print-provides" and compare that output with the version found in
+# $local_versions. However:
+#
+# - pkg-config requires the "package name" be provided for each query.
+#
+#   We could hard-code that in each call to pkg-config, but a better
+#   approach would be to enhance versions.txt so that it's multi-field,
+#   allowing the package name to also be specified. But that would
+#   require further updates to configure.ac.
+#
+# - pkg-config only works for libraries (and we have binaries to deal
+#   with binaries too).
+#
+#   We could handle libraries separately via
+#   "$binary --version|grep verion", but that's not reliable
+#   (atleast for qemu-lite).
+
 cached_versions="/usr/local/lib/cached_versions.txt"
 
 source $cwd/versions.txt
-
 [ -e "${cached_versions}" ] && source "$cached_versions"
 
 # Ensure "make install" as root can find clang
@@ -40,10 +112,22 @@ gnome_dl=https://download.gnome.org/sources
 sudo apt-get -qq install valgrind lcov uuid-dev pkg-config \
   zlib1g-dev libffi-dev gettext libpcre3-dev cppcheck \
   libmnl-dev libcap-ng-dev libgmp-dev libmpfr-dev libmpc-dev \
-  libpixman-1-dev rpm2cpio
+  libpixman-1-dev rpm2cpio pv
 
 mkdir cor-dependencies
 pushd cor-dependencies
+
+# "pv" itself needs to be built since the version available in Trusty
+# does not support the "-d" option.
+if [ ! -x /usr/local/bin/pv ]
+then
+    curl -L -O "http://www.ivarch.com/programs/sources/pv-${pv_version}.tar.gz"
+    tar xvf "pv-${pv_version}.tar.gz"
+    pushd "pv-${pv_version}"
+    ./configure && make && sudo make install
+    popd
+    rm -rf "pv-${pv_version}" &
+fi
 
 # Build glib
 if [ "${glib_version}" != "${cached_glib_version}" ]
@@ -54,9 +138,10 @@ then
     tar -xf "glib-${glib_version}.tar.xz"
     pushd "glib-${glib_version}"
     ./configure --disable-silent-rules
-    make -j5
+    run_cmd "make -j5" "glib-${glib_version}.log"
     sudo make install
     popd
+    rm -rf "glib-${glib_version}" &
 fi
 
 # Build json-glib
@@ -68,8 +153,9 @@ then
     tar -xf "json-glib-${json_glib_version}.tar.xz"
     pushd "json-glib-${json_glib_version}"
     ./configure --disable-silent-rules
-    make -j5
+    run_cmd "make -j5" "json-glib-${json_glib_version}.log"
     sudo make install
+    rm -rf "json-glib-${json_glib_version}" &
 popd
 fi
 
@@ -82,9 +168,10 @@ then
     tar -xf "check-${check_version}.tar.gz"
     pushd "check-${check_version}"
     ./configure
-    make -j5
+    run_cmd "make -j5" "check-${check_version}.log"
     sudo make install
     popd
+    rm -rf "check-${check_version}" &
 fi
 
 # Install bats
@@ -95,6 +182,7 @@ then
     pushd bats
     sudo ./install.sh /usr/local
     popd
+    rm -rf bats &
 fi
 
 # build gcc (required for qemu-lite)
@@ -104,10 +192,17 @@ then
     curl -L -O "http://mirrors.kernel.org/gnu/gcc/gcc-${gcc_version}/gcc-${gcc_version}.tar.bz2"
     tar xf "gcc-${gcc_version}.tar.bz2"
     pushd "gcc-${gcc_version}"
-    ./configure --enable-languages=c --disable-multilib --prefix="/usr/local/gcc-${gcc_version}"
-    make -j5
+    ./configure \
+        --enable-languages=c \
+        -disable-multilib \
+        --disable-libstdcxx \
+        --disable-bootstrap \
+        --disable-nls \
+        --prefix="/usr/local/gcc-${gcc_version}"
+    run_cmd "make -j5" "gcc-${gcc_version}.log"
     sudo make install
     popd
+    rm -rf "gcc-${gcc_version}" &
 fi
 
 # build qemu-lite
@@ -116,7 +211,7 @@ then
     curl -L -O "https://github.com/01org/qemu-lite/archive/${qemu_lite_version}.tar.gz"
     tar xf "${qemu_lite_version}.tar.gz"
     pushd "qemu-lite-${qemu_lite_version}"
-    CC="gcc" ./configure \
+    CC="/usr/local/gcc-${gcc_version}/bin/gcc" ./configure \
         --disable-bluez \
         --disable-brlapi \
         --disable-bzip2 \
@@ -162,9 +257,10 @@ then
         --datadir=/usr/local/share/qemu-lite \
         --libdir=/usr/local/lib64/qemu-lite \
         --libexecdir=/usr/local/libexec/qemu-lite
-    make -j5
+    run_cmd "make -j5" "qemu-lite-${qemu_lite_version}.log"
     sudo make install
     popd
+    rm -rf "qemu-lite-${qemu_lite_version}" &
 fi
 
 # install kernel + Clear Containers image
@@ -173,7 +269,7 @@ pushd artifacts
 clr_release=$(curl -L https://download.clearlinux.org/latest)
 clr_kernel_base_url="https://download.clearlinux.org/releases/${clr_release}/clear/x86_64/os/Packages"
 
-clr_assets_dir=/usr/share/clear-containers/
+clr_assets_dir=/usr/share/clear-containers
 sudo mkdir -p "$clr_assets_dir"
 
 # find newest containers kernel
@@ -191,15 +287,15 @@ then
     rpm2cpio "${clr_kernel}"| (cd / && sudo cpio -idv)
 fi
 
+clr_image_url="https://download.clearlinux.org/current/clear-${clr_release}-containers.img.xz"
+clr_image_compressed=$(basename "$clr_image_url")
+
+# uncompressed image name
+clr_image=${clr_image_compressed/.xz/}
+
 # download image
 if [ ! -e "${clr_assets_dir}/${clr_image}" ]
 then
-    clr_image_url="https://download.clearlinux.org/current/clear-${clr_release}-containers.img.xz"
-    clr_image_compressed=$(basename "$clr_image_url")
-    
-    # uncompressed image name
-    clr_image=${clr_image_compressed/.xz/}
-    
     for file in "${clr_image_url}-SHA512SUMS" "${clr_image_url}"
     do
         curl -L -O "$file"
@@ -251,9 +347,9 @@ popd
 
 popd
 
-# copy the "versions database" to the cache directory if it's not
+# Copy the "versions database" to the cache directory if it's not
 # already there. Since /usr/local is our Travis cache directory, we can
-# identify on the next build if these build dependencies need to
+# identify on the next build if these build dependencies need to be
 # rebuilt. Most of time they won't (but will if a version is bumped in
 # the versions database).
 sudo mkdir -p $(dirname "${cached_versions}")
