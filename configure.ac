@@ -27,7 +27,10 @@ AM_INIT_AUTOMAKE([foreign -Wall -Werror -Wno-portability silent-rules subdir-obj
 AM_SILENT_RULES([yes])
 AC_CONFIG_SRCDIR([src/main.c])
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Makefile data/vm.json data/config.json data/hypervisor.args tests/functional/common.bash tests/functional/data/config-minimal-cc-oci.json])
+AC_CONFIG_FILES([Makefile data/vm.json data/config.json
+                 data/hypervisor.args tests/functional/common.bash
+                 tests/functional/data/config-minimal-cc-oci.json],
+                 [$SED -i '/^$/d' data/hypervisor.args])
 AC_LANG(C)
 
 LT_INIT
@@ -42,6 +45,7 @@ AC_PROG_CC
 AM_PROG_CC_C_O
 AC_PROG_INSTALL
 AC_PROG_MKDIR_P
+AC_PROG_SED
 
 
 # Checks for header files.
@@ -241,6 +245,31 @@ AC_ARG_WITH([cc-image],
     ]
 )
 
+AC_ARG_WITH([kvm-support],
+    [AS_HELP_STRING([--without-kvm-support],
+        [disable kvm (VT-x / vmx) support (SLOW)])
+    ],
+    [
+        # disable kvm which will be slow, but will work on systems
+        # without VT-x support.
+        HYPERVISOR_MACHINE_TYPE="pc,nvdimm"
+        HYPERVISOR_CPU_TYPE="qemu64"
+        HYPERVISOR_KVM_OPTIONS=""
+
+    ],
+    [
+        HYPERVISOR_MACHINE_TYPE="pc-lite,accel=kvm,kernel_irqchip,nvdimm"
+        HYPERVISOR_CPU_TYPE="host"
+        # XXX: this multi-line value must be retained!!
+        HYPERVISOR_KVM_OPTIONS="-global
+kvm-pit.lost_tick_policy=discard"
+    ]
+)
+
+AC_SUBST([HYPERVISOR_MACHINE_TYPE])
+AC_SUBST([HYPERVISOR_CPU_TYPE])
+AC_SUBST([HYPERVISOR_KVM_OPTIONS])
+
 AC_OUTPUT
 
 dnl === Summary ===============================================================
@@ -260,6 +289,12 @@ cc-oci-runtime - $VERSION
        Container image          : $CONTAINERS_IMG
        Container image services : $CC_IMAGE_SYSTEMDSYSTEMUNIT_PATH
        Debug build              : $enable_debug
+
+ • Hypervisor options:
+
+       machine type             : '$HYPERVISOR_MACHINE_TYPE'
+       CPU type                 : '$HYPERVISOR_CPU_TYPE'
+       kvm options              : '$HYPERVISOR_KVM_OPTIONS'
 
  • Tests:
 

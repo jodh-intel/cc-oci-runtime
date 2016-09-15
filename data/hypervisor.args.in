@@ -2,7 +2,7 @@
 -name
 @NAME@
 -machine
-pc-lite,accel=kvm,kernel_irqchip,nvdimm
+@HYPERVISOR_MACHINE_TYPE@
 -device
 nvdimm,memdev=mem0,id=nv0
 -object
@@ -20,13 +20,11 @@ local,id=workload9p,path=@WORKLOAD_DIR@,security_model=none
 -smp
 2,sockets=2,cores=1,threads=1
 -cpu
-host
+@HYPERVISOR_CPU_TYPE@
 -rtc
 base=utc,driftfix=slew
 -no-user-config
 -nodefaults
--global
-kvm-pit.lost_tick_policy=discard
 -device
 virtio-serial-pci,id=virtio-serial0
 -device
@@ -42,6 +40,7 @@ unix:@COMMS_SOCKET@,server,nowait
 -nographic
 -vga
 none
+@HYPERVISOR_KVM_OPTIONS@
 @NETDEV@
 @NETDEV_PARAMS@
 @NETDEVICE@
