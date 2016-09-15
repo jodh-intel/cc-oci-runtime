@@ -19,6 +19,9 @@
 
 set -e
 
+# remove all containers
+docker rm -f $(docker ps -a -q) >/dev/null 2>&1
+
 if [ $TRAVIS_TEST_RESULT -eq 0 ]
 then
     # build was successful
