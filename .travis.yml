@@ -30,8 +30,7 @@ before_script:
 - ./.travis-setup.sh
 
 script:
-- ./autogen.sh --enable-cppcheck --enable-valgrind --disable-valgrind-helgrind --disable-valgrind-drd --disable-silent-rules
-- make -j5 CFLAGS=-Werror check
+- ./.travis-run.sh
 
 after_failure:
 - ./.travis-teardown.sh
