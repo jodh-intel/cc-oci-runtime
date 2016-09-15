@@ -80,4 +80,5 @@ docker run -ti \
     /bin/bash -c "./autogen.sh $args && \
         make -j5 CFLAGS=$CFLAGS && \
         make check && \
+        make distcheck && \
         sudo make check"
