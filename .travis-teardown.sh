@@ -19,6 +19,12 @@
 
 set -e
 
+if [ $TRAVIS_TEST_RESULT -eq 0 ]
+then
+    # build was successful
+    exit 0
+fi
+
 printf "=== Build failed ===\n"
 
 for f in $(ls *_test*.log)

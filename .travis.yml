@@ -29,6 +29,9 @@ script:
 after_failure:
 - ./.travis-teardown.sh
 
+after_success:
+- ./.travis-teardown.sh
+
 notifications:
   email:
     recipients:
