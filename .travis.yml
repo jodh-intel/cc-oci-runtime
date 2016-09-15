@@ -6,6 +6,13 @@ compiler:
   - gcc
   - clang
 
+services:
+  - docker
+
+cache:
+  directories:
+    - /var/lib/docker
+
 env:
   global:
     - PATH=/usr/local/bin:$PATH
