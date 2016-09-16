@@ -69,11 +69,13 @@ grep -q vmx /proc/cpuinfo || args="$args --without-kvm-support"
 #
 # Notes:
 #
-# - the security option which is required to make use of ptrace(2)
-#   under docker.
+# - "--security-opt=" is required to make use of ptrace(2) within the
+#   container.
+# - "--privileged" is required to create namespaces within the container.
 # - the test runs are not run multi-job since with "-j" the output is
 #   intermingled and hence confusing.
 docker run -ti \
+    --privileged \
     --security-opt=seccomp:unconfined \
     -v $PWD:/home/cor \
     "$image" \
