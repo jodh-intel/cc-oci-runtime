@@ -42,7 +42,6 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/ptrace.h>
 
 #include <glib.h>
 #include <glib/gprintf.h>
@@ -169,19 +168,6 @@ cc_oci_setup_child (struct cc_oci_config *config)
 {
 	/* become session leader */
 	setsid ();
-
-	/* arrange for the process to be paused when the child command
-	 * is exec(3)'d to ensure that the VM does not launch until
-	 * "start" is called.
-	 */
-	if (ptrace (PTRACE_TRACEME, 0, NULL, 0) < 0) {
-		g_critical ("failed to ptrace in child: %s",
-				strerror (errno));
-		return false;
-	}
-
-	/* log before the fds are closed */
-	g_debug ("set ptrace on child");
 
 	/* Do not close fds when VM runs in detached mode*/
 	if (! config->detached_mode) {
@@ -488,7 +474,75 @@ cc_oci_vm_netcfg_get (struct cc_oci_config *config,
 }
 
 /*!
- * Start the hypervisor (in a paused state) as a child process.
+ * Start CC_OCI_SHIM as a child process.
+ *
+ * \param config \ref cc_oci_config.
+ *
+ * \note This is called from the hypervisor child process, since only
+ * that child has full information on the hypervisor configuration
+ * (since it calls cc_oci_expand_cmdline()).
+ *
+ * \return \c true on success, else \c false.
+ */
+
+// FIXME: needs to close child_error_pipe[1] to avoid blocking parent!
+
+static gboolean
+cc_shim_launch (struct cc_oci_config *config)
+{
+	gboolean      ret = false;
+	GPid          pid;
+	GSpawnFlags   flags = 0;
+	gchar        *args[] = {CC_OCI_SHIM, NULL};
+	GError       *error = NULL;
+
+	if (! config) {
+		return false;
+	}
+
+	flags |= G_SPAWN_CHILD_INHERITS_STDIN;
+	flags |= G_SPAWN_DO_NOT_REAP_CHILD;
+	flags |= G_SPAWN_SEARCH_PATH;
+
+	g_debug ("running command:");
+	for (gchar** p = args; p && *p; p++) {
+		g_debug ("arg: '%s'", *p);
+	}
+
+	if (! cc_oci_setup_child (config)) {
+		return false;
+	}
+
+	ret = g_spawn_async_with_pipes(NULL, /* wd */
+			args,
+			NULL, /* env */
+			flags,
+			NULL, /* child setup */
+			NULL, /* child data */
+			&pid,
+			NULL, /* stdin */
+			NULL, /* stdout */
+			NULL, /* stderr */
+			&error);
+
+	if (! ret) {
+		g_critical ("failed to spawn shim: %s",
+				error->message);
+		return false;
+	}
+
+	/* Inform caller of workload PID */
+	config->state.workload_pid = pid;
+
+	g_debug ("shim process ('%s') running with pid %d",
+			args[0], (int)pid);
+
+
+	return true;
+}
+
+/*!
+ * Start the hypervisor as a child process.
  *
  * Due to the way networking is handled in Docker, the logic here
  * is unfortunately rather complex.
@@ -502,7 +556,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 {
 	gboolean           ret = false;
 	GPid               pid;
-	int                status = 0;
 	ssize_t            bytes;
 	char               buffer[2];
 	int                hook_status_pipe[2] = {-1, -1};
@@ -569,7 +622,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 
 	if (! pid) {
 		/* child */
-		pid = config->state.workload_pid = getpid ();
 
 		close (hook_status_pipe[1]);
 		close (child_err_pipe[0]);
@@ -627,6 +679,10 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			goto child_failed;
 		}
 
+		if (! cc_shim_launch (config)) {
+			goto child_failed;
+		}
+
 		// FIXME: add netcfg to state file
 		ret = cc_oci_state_file_create (config, timestamp);
 		if (! ret) {
@@ -653,7 +709,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 
 	/* parent */
 
-	g_debug ("child pid is %u", (unsigned)pid);
+	g_debug ("hypervisor child pid is %u", (unsigned)pid);
 
 	close (hook_status_pipe[0]);
 	hook_status_pipe[0] = -1;
@@ -700,40 +756,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 	g_debug ("child setup successful");
-
-	/* wait for child to receive the expected SIGTRAP caused
-	 * by it calling exec(2) whilst under PTRACE control.
-	 */
-	if (waitpid (pid, &status, 0) != pid) {
-		g_critical ("failed to wait for child %d: %s",
-				pid, strerror (errno));
-		goto out;
-	}
-
-	if (! WIFSTOPPED (status)) {
-		g_critical ("child %d not stopped by signal", pid);
-		goto out;
-	}
-
-	if (! (WSTOPSIG (status) == SIGTRAP)) {
-		g_critical ("child %d not stopped by expected signal",
-				pid);
-		goto out;
-	}
-
-	/* Stop tracing, but send a stop signal to the child so that it
-	 * remains in a paused state.
-	 */
-	if (ptrace (PTRACE_DETACH, pid, NULL, SIGSTOP) < 0) {
-		g_critical ("failed to ptrace detach in child %d: %s",
-				(int)pid,
-				strerror (errno));
-		goto out;
-	}
-
-	g_debug ("child process running in stopped state "
-			"with pid %u",
-			(unsigned)config->state.workload_pid);
 
 	if (config->pid_file) {
 		ret = cc_oci_create_pidfile (config->pid_file,

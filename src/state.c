@@ -59,6 +59,7 @@ static void handle_state_created_section(GNode*, struct handler_data*);
 static void handle_state_mounts_section(GNode*, struct handler_data*);
 static void handle_state_console_section(GNode*, struct handler_data*);
 static void handle_state_vm_section(GNode*, struct handler_data*);
+static void handle_state_proxy_section(GNode*, struct handler_data*);
 static void handle_state_annotations_section(GNode*, struct handler_data*);
 
 /*! Used to handle each section in \ref CC_OCI_STATE_FILE. */
@@ -87,7 +88,8 @@ static struct state_handler {
 	{ "created"     , handle_state_created_section     , 1 , 0 },
 	{ "mounts"      , handle_state_mounts_section      , 0 , 0 },
 	{ "console"     , handle_state_console_section     , 2 , 0 },
-	{ "vm"          , handle_state_vm_section          , 5 , 0 },
+	{ "vm"          , handle_state_vm_section          , 6 , 0 },
+	{ "proxy"       , handle_state_proxy_section       , 2 , 0 },
 	{ "annotations" , handle_state_annotations_section , 0 , 0 },
 
 	/* terminator */
@@ -351,8 +353,54 @@ handle_state_vm_section(GNode* node, struct handler_data* data) {
 	} else if (g_strcmp0(node->data, "kernel_params") == 0) {
 		vm->kernel_params = g_strdup(node->children->data);
 		(*(data->subelements_count))++;
+	} else if (g_strcmp0(node->data, "pid") == 0) {
+		gchar *endptr = NULL;
+		vm->pid = (GPid)g_ascii_strtoll((char*)node->data, &endptr, 10);
+		if (endptr != node->data) {
+			(*(data->subelements_count))++;
+		} else {
+			g_critical("failed to convert '%s' to int",
+			    (char*)node->data);
+		}
 	} else {
 		g_critical("unknown console option: %s", (char*)node->data);
+	}
+}
+
+/*!
+ * handler for proxy section.
+ *
+ * \param node \c GNode.
+ * \param data \ref handler_data.
+ */
+static void
+handle_state_proxy_section(GNode* node, struct handler_data* data) {
+	struct cc_proxy *proxy;
+
+	if (! (node && node->data)) {
+		return;
+	}
+	if (! (node->children && node->children->data)) {
+		g_critical("%s missing value", (char*)node->data);
+		return;
+	}
+
+	g_assert (data->state);
+
+	proxy = data->state->proxy;
+
+	g_assert (proxy);
+
+	if (g_strcmp0(node->data, "ctlSocket") == 0) {
+		proxy->agent_ctl_socket =
+			g_strdup ((gchar *)node->children->data);
+		(*(data->subelements_count))++;
+	} else if (g_strcmp0(node->data, "ioSocket") == 0) {
+		proxy->agent_tty_socket =
+			g_strdup ((gchar *)node->children->data);
+		(*(data->subelements_count))++;
+	} else {
+		g_critical("unknown proxy option: %s", (char*)node->data);
 	}
 }
 
@@ -577,6 +625,7 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 	JsonObject  *obj = NULL;
 	JsonObject  *console = NULL;
 	JsonObject  *vm = NULL;
+	JsonObject  *proxy = NULL;
 	JsonObject  *annotation_obj = NULL;
 	JsonArray   *mounts = NULL;
 	gchar       *str = NULL;
@@ -670,6 +719,9 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 	/* Add an object containing hypervisor details */
 	vm = json_object_new ();
 
+	json_object_set_int_member (vm, "pid",
+			(unsigned)config->state.hypervisor_pid);
+
 	json_object_set_string_member (vm, "hypervisor_path",
 			config->vm->hypervisor_path);
 
@@ -690,6 +742,17 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 			? config->vm->kernel_params : "");
 
 	json_object_set_object_member (obj, "vm", vm);
+
+	/* Add an object containing proxy details */
+	proxy = json_object_new ();
+
+	json_object_set_string_member (proxy, "ctlSocket",
+			config->proxy.agent_ctl_socket);
+
+	json_object_set_string_member (proxy, "ioSocket",
+			config->proxy.agent_tty_socket);
+
+	json_object_set_object_member (obj, "proxy", proxy);
 
 	if (config->oci.annotations) {
 		/* Add an object containing annotations */

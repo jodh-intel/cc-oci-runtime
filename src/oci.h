@@ -42,6 +42,7 @@
 #include <linux/sched.h>
 
 #include <glib.h>
+#include <gio/gio.h>
 
 #ifndef CLONE_NEWCGROUP
 #define CLONE_NEWCGROUP 0x02000000
@@ -74,13 +75,41 @@
 
 /** Directory below which container-specific directory will be created.
  */
+#if 0
+#define CC_OCI_RUNTIME_DIR_PREFIX	LOCALSTATEDIR \
+					"/run/cc-oci-runtime"
+#endif
 #define CC_OCI_RUNTIME_DIR_PREFIX	"/run/cc-oci-runtime"
+
+/** Command used to talk to the shim. */
+#define CC_OCI_PROXY			"cc-proxy"
+
+/** Command used to _represent_ the workload.
+ *  containerd expects to be given a PID for the workload process, but
+ *  with Clear Containers, the process actually runs inside the
+ *  hypervisor.
+ *
+ *  The shim represents the workload process, with the help of
+ *  CC_OCI_PROXY:
+ *
+ *  - handles I/O from the real workload process.
+ *  - exits with return code of real workload process.
+ *  - reacts to signals.
+ */
+#define CC_OCI_SHIM 			"cc-shim"
+
+/** Full path to socket used to talk to \ref CC_OCI_PROXY. */
+#define CC_OCI_PROXY_SOCKET 		CC_OCI_RUNTIME_DIR_PREFIX \
+					"/proxy.sock"
 
 /** Mode for \ref CC_OCI_WORKLOAD_FILE. */
 #define CC_OCI_SCRIPT_MODE		0755
 
 /** Mode for all created directories. */
 #define CC_OCI_DIR_MODE                0750
+
+/** Size of buffer to use to receive network data */
+#define CC_OCI_NET_BUF_SIZE		2048
 
 /** Platform we expect \ref CC_OCI_CONFIG_FILE to specify. */
 #define CC_OCI_EXPECTED_PLATFORM	"linux"
@@ -264,6 +293,9 @@ struct cc_oci_vm_cfg {
 
 	/** Kernel parameters (optional). */
 	gchar *kernel_params;
+
+	/** PID of hypervisor. */
+	GPid pid;
 };
 
 /** cc-specific network configuration data. */
@@ -384,6 +416,7 @@ struct oci_state {
 	gboolean         use_socket_console;
 
 	struct cc_oci_vm_cfg *vm;
+	struct cc_proxy      *proxy;
 };
 
 /** clr-specific state fields. */
@@ -410,7 +443,15 @@ struct cc_oci_container_state {
 	 */
 	gchar procsock_path[PATH_MAX];
 
-	/* Process ID of hypervisor. */
+	/** Process ID of hypervisor. */
+	GPid hypervisor_pid;
+
+	/** Process ID of of the OCI workload (in fact the PID
+	 * of CC_OCI_SHIM).
+	 *
+	 * \note it is not called shim_pid, to remind us of its
+	 * function.
+	 */
 	GPid workload_pid;
 
 	/** OCI status of container. */
@@ -438,6 +479,32 @@ struct cc_oci_mount {
 	 * NULL if no directory was created to mount dest
 	 */
 	gchar          *directory_created;
+};
+
+/**
+ * Representation of a connect to \ref CC_OCI_PROXY.
+ */
+struct cc_proxy {
+	// FIXME: not needed - hard-coded.
+#if 0
+	/** Full path to socket used to connect to \ref CC_OCI_PROXY. */
+	gchar *path;
+#endif
+
+	/** Socket connection used to communicate with \ref
+	 * CC_OCI_PROXY.
+	 */
+	GSocket *socket;
+
+	/** Full path to socket used to send control messages
+	 * to the agent running in the VM.
+	 */
+	gchar *agent_ctl_socket;
+
+	/** Full path to socket used to transfer I/O
+	 * to/from the agent running in the VM.
+	 */
+	gchar *agent_tty_socket;
 };
 
 /** The main object holding all configuration data.
@@ -489,6 +556,8 @@ struct cc_oci_config {
 
 	/** If \c true, don't wait for hypervisor process to finish. */
 	gboolean detached_mode;
+
+	struct cc_proxy proxy;
 };
 
 gboolean cc_oci_attach(struct cc_oci_config *config,

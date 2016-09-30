@@ -30,6 +30,7 @@
 #include "command.h"
 #include "oci-config.h"
 #include "priv.h"
+#include "proxy.h"
 
 /* globals */
 static char *program_name;

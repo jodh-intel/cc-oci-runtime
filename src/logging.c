@@ -519,8 +519,8 @@ void cc_oci_setup_hypervisor_logs (struct cc_oci_config *config)
 		return;
 	}
 
-	/* ensure that current pid is the hypervisor id */
-	if (config->state.workload_pid != getpid ()) {
+	/* ensure that current pid is the hypervisor */
+	if (config->state.hypervisor_pid != getpid ()) {
 		return;
 	}
 
