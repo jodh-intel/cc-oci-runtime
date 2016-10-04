@@ -58,6 +58,7 @@
 #include "common.h"
 #include "logging.h"
 #include "netlink.h"
+#include "proxy.h"
 
 static GMainLoop* main_loop = NULL;
 private GMainLoop* hook_loop = NULL;
@@ -710,6 +711,16 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	/* parent */
 
 	g_debug ("hypervisor child pid is %u", (unsigned)pid);
+
+	/* This needs to be called by the child since only the
+	 * child has the full hypervisor options (including the
+	 * hypervisor sockets required to be passed to the proxy).
+	 */
+	if (! cc_proxy_wait_until_ready (config)) {
+		g_critical ("failed to wait for proxy %s",
+				CC_OCI_PROXY);
+		return false;
+	}
 
 	close (hook_status_pipe[0]);
 	hook_status_pipe[0] = -1;

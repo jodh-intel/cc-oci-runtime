@@ -53,7 +53,6 @@
 #include "runtime.h"
 #include "spec_handler.h"
 #include "command.h"
-#include "proxy.h"
 
 extern struct start_data start_data;
 
@@ -909,14 +908,6 @@ cc_oci_create (struct cc_oci_config *config)
 	if (! cc_oci_vm_launch (config)) {
 		g_critical ("failed to launch VM");
 		goto out;
-	}
-
-	// FIXME: this needs to be called from the *child* since
-	// currently proxy->agent_ctl_socket and proxy->agent_tty_socket
-	// are not set.
-	if (! cc_proxy_wait_until_ready (config)) {
-		g_critical ("failed to wait for proxy %s",
-				CC_OCI_PROXY);
 	}
 
 	ret = true;
