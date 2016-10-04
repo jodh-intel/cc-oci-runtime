@@ -550,6 +550,14 @@ cc_oci_state_file_read (const char *file)
 			goto out;
 		}
 
+		state->proxy = g_malloc0 (sizeof(struct cc_proxy));
+		if (! state->proxy) {
+			g_free (state->vm);
+			g_free (state);
+			state = NULL;
+			goto out;
+		}
+
 		/* reset subelements_count */
 		for (handler=state_handlers; handler->name; ++handler) {
 			handler->subelements_count = 0;
@@ -605,6 +613,13 @@ cc_oci_state_free (struct oci_state *state)
         if (state->annotations) {
                 cc_oci_annotations_free_all(state->annotations);
         }
+
+	if (state->proxy) {
+		g_free_if_set(state->proxy->agent_ctl_socket);
+		g_free_if_set(state->proxy->agent_tty_socket);
+		g_free (state->proxy);
+	}
+
 	g_free (state);
 }
 
