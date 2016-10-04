@@ -195,9 +195,11 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 			&bytes_handled, &error);
 
 	if (status != G_IO_STATUS_NORMAL) {
-		g_critical ("failed to send msg to proxy: %s",
-				error->message);
-		g_error_free (error);
+		g_critical ("failed to send msg to proxy");
+		if (error) {
+			g_critical ("error: %s", error->message);
+			g_error_free (error);
+		}
 		goto out;
 	}
 
@@ -207,9 +209,11 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 			&bytes_handled, &error);
 
 	if (status != G_IO_STATUS_NORMAL) {
-		g_critical ("failed to receive msg from proxy: %s",
-				error->message);
-		g_error_free (error);
+		g_critical ("failed to receive msg from proxy");
+		if (error) {
+			g_critical ("error: %s", error->message);
+			g_error_free (error);
+		}
 		goto out;
 	}
 
