@@ -355,12 +355,12 @@ handle_state_vm_section(GNode* node, struct handler_data* data) {
 		(*(data->subelements_count))++;
 	} else if (g_strcmp0(node->data, "pid") == 0) {
 		gchar *endptr = NULL;
-		vm->pid = (GPid)g_ascii_strtoll((char*)node->data, &endptr, 10);
-		if (endptr != node->data) {
+		vm->pid = (GPid)g_ascii_strtoll((char*)node->children->data, &endptr, 10);
+		if (endptr != node->children->data) {
 			(*(data->subelements_count))++;
 		} else {
 			g_critical("failed to convert '%s' to int",
-			    (char*)node->data);
+			    (char*)node->children->data);
 		}
 	} else {
 		g_critical("unknown console option: %s", (char*)node->data);
