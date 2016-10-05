@@ -71,6 +71,9 @@ cc_proxy_connect (struct cc_proxy *proxy)
 		goto out_socket;
 	}
 
+	/* block on write and read */
+	g_socket_set_blocking (proxy->socket, TRUE);
+
 	ret = g_socket_connect (proxy->socket, addr, NULL, &error);
 	if (! ret) {
 		g_critical ("failed to connect to socket %s: %s",
@@ -153,10 +156,10 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	obj = json_object_new ();
 	data = json_object_new ();
 
-	// FIXME: hard-coded id
-	json_object_set_string_member (obj, "id", "0");
-
-	json_object_set_string_member (obj, "command", "hello");
+	/* "hello" is the command used to initiate communicate with the
+	 * proxy.
+	 */
+	json_object_set_string_member (obj, "id", "hello");
 
 	json_object_set_string_member (data, "containerId",
 			container_id);
@@ -187,12 +190,23 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 
 	g_io_channel_set_encoding (channel, NULL, NULL);
 
-	g_debug ("waiting for proxy");
+	g_debug ("sending initial message to proxy (fd %d)", fd);
 
 	/* blocking write */
 	status = g_io_channel_write_chars (channel,
 			msg, -1,
 			&bytes_handled, &error);
+
+	if (status != G_IO_STATUS_NORMAL) {
+		g_critical ("failed to prepare msg for proxy");
+		if (error) {
+			g_critical ("error: %s", error->message);
+			g_error_free (error);
+		}
+		goto out;
+	}
+
+	status = g_io_channel_flush (channel, &error);
 
 	if (status != G_IO_STATUS_NORMAL) {
 		g_critical ("failed to send msg to proxy");
@@ -202,6 +216,8 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 		}
 		goto out;
 	}
+
+	g_debug ("waiting for proxy reply");
 
 	status = g_io_channel_read_chars (channel,
 			buffer,
