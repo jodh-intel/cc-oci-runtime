@@ -680,6 +680,21 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			goto child_failed;
 		}
 
+		/* This needs to be called by the child since only the
+		 * child has the full hypervisor options (including the
+		 * hypervisor sockets required to be passed to the proxy).
+		 */
+
+		// FIXME: it also needs to be called *AFTER* the
+		// hypervisor has launched since the proxy validates the
+		// sockets (which are only created after the hypervisor
+		// starts).
+		if (! cc_proxy_wait_until_ready (config)) {
+			g_critical ("failed to wait for proxy %s",
+					CC_OCI_PROXY);
+			goto child_failed;
+		}
+
 		if (! cc_shim_launch (config)) {
 			goto child_failed;
 		}
@@ -711,16 +726,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	/* parent */
 
 	g_debug ("hypervisor child pid is %u", (unsigned)pid);
-
-	/* This needs to be called by the child since only the
-	 * child has the full hypervisor options (including the
-	 * hypervisor sockets required to be passed to the proxy).
-	 */
-	if (! cc_proxy_wait_until_ready (config)) {
-		g_critical ("failed to wait for proxy %s",
-				CC_OCI_PROXY);
-		return false;
-	}
 
 	close (hook_status_pipe[0]);
 	hook_status_pipe[0] = -1;
