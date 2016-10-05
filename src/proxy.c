@@ -124,6 +124,70 @@ cc_proxy_disconnect (struct cc_proxy *proxy)
 	return true;
 }
 
+static gboolean cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
+	const gchar* msg)
+{
+	gsize bytes_written = 0;
+//	GIOStatus status;
+	gsize len = 0;
+
+	if (condition == G_IO_HUP) {
+		g_io_channel_unref(source);
+		goto out;
+	}
+
+	/* FIXME: Do not use strlen! */
+	len = strlen(msg);
+
+	g_debug("writing message to proxy socket: %s", msg);
+
+	//do {
+		/*status =*/ g_io_channel_write_chars(source, msg,
+				(gssize)len, &bytes_written, NULL);
+	//}while(status == G_IO_STATUS_NORMAL && len != bytes_written );
+
+	g_io_channel_flush(source, NULL);
+
+out:
+	/* unregister this watcher */
+	return false;
+}
+
+static GMainLoop         *loop;
+
+static gboolean cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
+	GString* msg)
+{
+	GIOStatus status;
+	gchar buffer[LINE_MAX];
+	gsize bytes_read;
+
+	if (condition == G_IO_HUP) {
+		g_io_channel_unref(source);
+		goto out;
+	}
+
+	/* read and print all chars */
+	while(true) {
+		status = g_io_channel_read_chars(source, buffer, sizeof(buffer),
+				&bytes_read, NULL);
+		if (status == G_IO_STATUS_EOF) {
+			goto out;
+		}
+		if (status != G_IO_STATUS_NORMAL) {
+			break;
+		}
+		g_string_append_len(msg, buffer, (gssize)bytes_read);
+	}
+
+	g_debug("message read from proxy socket: %s", msg->str);
+
+out:
+	g_main_loop_quit(loop);
+	/* unregister this watcher */
+	return false;
+}
+
 /**
  * Send the initial message to the proxy
  * which will block until it is ready. 
@@ -141,15 +205,18 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	JsonNode          *root = NULL;
 	JsonGenerator     *generator = NULL;
 	g_autofree gchar  *msg = NULL;
-	GError            *error = NULL;
+	GString           *msg_read = NULL;
 	GIOChannel        *channel = NULL;
 	gboolean           ret = false;
 	int                fd;
-	GIOStatus          status;
-	gsize              bytes_handled;
-	gchar              buffer[CC_OCI_NET_BUF_SIZE] = { 0 };
 
 	if (! (proxy && proxy->socket && container_id)) {
+		return false;
+	}
+
+	loop = g_main_loop_new (NULL, false);
+	if (! loop) {
+		g_critical("failed to create main loop");
 		return false;
 	}
 
@@ -188,50 +255,20 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 		goto out;
 	}
 
+	msg_read = g_string_new("");
+
 	g_io_channel_set_encoding (channel, NULL, NULL);
 
-	g_debug ("sending initial message to proxy (fd %d)", fd);
+	/* add socket stdin watcher */
+	g_io_add_watch(channel, G_IO_IN | G_IO_HUP,
+	    (GIOFunc)cc_proxy_write_msg, msg);
 
-	/* blocking write */
-	status = g_io_channel_write_chars (channel,
-			msg, -1,
-			&bytes_handled, &error);
+	/* add socket stdout watcher */
+	g_io_add_watch(channel, G_IO_OUT | G_IO_HUP,
+	    (GIOFunc)cc_proxy_read_msg, &msg_read);
 
-	if (status != G_IO_STATUS_NORMAL) {
-		g_critical ("failed to prepare msg for proxy");
-		if (error) {
-			g_critical ("error: %s", error->message);
-			g_error_free (error);
-		}
-		goto out;
-	}
-
-	status = g_io_channel_flush (channel, &error);
-
-	if (status != G_IO_STATUS_NORMAL) {
-		g_critical ("failed to send msg to proxy");
-		if (error) {
-			g_critical ("error: %s", error->message);
-			g_error_free (error);
-		}
-		goto out;
-	}
-
-	g_debug ("waiting for proxy reply");
-
-	status = g_io_channel_read_chars (channel,
-			buffer,
-			sizeof (buffer),
-			&bytes_handled, &error);
-
-	if (status != G_IO_STATUS_NORMAL) {
-		g_critical ("failed to receive msg from proxy");
-		if (error) {
-			g_critical ("error: %s", error->message);
-			g_error_free (error);
-		}
-		goto out;
-	}
+	/* run main loop */
+	g_main_loop_run(loop);
 
 	ret = true;
 
@@ -244,6 +281,8 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	}
 
 out:
+	g_string_free(msg_read, true);
+	g_main_loop_unref(loop);
 	return ret;
 }
 

@@ -560,6 +560,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	ssize_t            bytes;
 	char               buffer[2];
 	int                hook_status_pipe[2] = {-1, -1};
+	int                hypervisor_args_pipe[2] = {-1, -1};
 	int                child_err_pipe[2] = {-1, -1};
 	gchar            **args = NULL;
 	gchar            **p;
@@ -568,6 +569,8 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	gboolean           setup_networking;
 	gboolean           hook_status = false;
 	GPtrArray         *additional_args = NULL;
+	gint               hypervisor_args_len;
+	gchar             *hypervisor_args;
 
 	setup_networking = cc_oci_enable_networking ();
 
@@ -609,6 +612,12 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
+	if (pipe (hypervisor_args_pipe) < 0) {
+		g_critical ("failed to create hypervisor args pipe: %s",
+				strerror (errno));
+		goto out;
+	}
+
 	if (! cc_oci_fd_set_cloexec (child_err_pipe[1])) {
 		g_critical ("failed to set close-exec bit on fd");
 		goto out;
@@ -625,6 +634,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		/* child */
 
 		close (hook_status_pipe[1]);
+		close (hypervisor_args_pipe[1]);
 		close (child_err_pipe[0]);
 
 		g_debug ("reading hook status from parent");
@@ -666,38 +676,42 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 
 		}
 
-		g_debug ("building hypervisor command-line");
-
-		// FIXME: add network config bits to following functions:
-		//
-		// - cc_oci_container_state()
-		// - oci_state()
-		// - cc_oci_update_options()
-
-		cc_oci_populate_extra_args(config, &additional_args);
-		ret = cc_oci_vm_args_get (config, &args, additional_args);
-		if (! (ret && args)) {
+		/* first - read hypervisor args length */
+		g_debug ("reading hypervisor command-line length from pipe");
+		bytes = read (hypervisor_args_pipe[0], &hypervisor_args_len,
+			sizeof (hypervisor_args_len));
+		if (bytes < 0) {
+			g_critical ("failed to read hypervisor args length");
 			goto child_failed;
 		}
 
-		/* This needs to be called by the child since only the
-		 * child has the full hypervisor options (including the
-		 * hypervisor sockets required to be passed to the proxy).
+		hypervisor_args = g_new0(gchar, hypervisor_args_len);
+		if (! hypervisor_args) {
+			g_critical ("failed alloc memory for hypervisor args");
+			goto child_failed;
+		}
+
+		/* second - read hypervisor args */
+		g_debug ("reading hypervisor command-line from pipe");
+		bytes = read (hypervisor_args_pipe[0], hypervisor_args,
+			(size_t)hypervisor_args_len);
+		if (bytes < 0) {
+			g_critical ("failed to read hypervisor args");
+			g_free(hypervisor_args);
+			goto child_failed;
+		}
+
+		/* third - convert string to args, the string that was read
+		 * from pipe has '\n' as delimiter
 		 */
-
-		// FIXME: it also needs to be called *AFTER* the
-		// hypervisor has launched since the proxy validates the
-		// sockets (which are only created after the hypervisor
-		// starts).
-		if (! cc_proxy_wait_until_ready (config)) {
-			g_critical ("failed to wait for proxy %s",
-					CC_OCI_PROXY);
+		args = g_strsplit_set(hypervisor_args, "\n", -1);
+		if (! args) {
+			g_critical ("failed split hypervisor args");
+			g_free(hypervisor_args);
 			goto child_failed;
 		}
 
-		if (! cc_shim_launch (config)) {
-			goto child_failed;
-		}
+		g_free(hypervisor_args);
 
 		// FIXME: add netcfg to state file
 		ret = cc_oci_state_file_create (config, timestamp);
@@ -730,6 +744,9 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	close (hook_status_pipe[0]);
 	hook_status_pipe[0] = -1;
 
+	close (hypervisor_args_pipe[0]);
+	hypervisor_args_pipe[0] = -1;
+
 	close (child_err_pipe[1]);
 	child_err_pipe[1] = -1;
 
@@ -760,6 +777,51 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
+	g_debug ("building hypervisor command-line");
+
+	// FIXME: add network config bits to following functions:
+	//
+	// - cc_oci_container_state()
+	// - oci_state()
+	// - cc_oci_update_options()
+
+	cc_oci_populate_extra_args(config, &additional_args);
+	ret = cc_oci_vm_args_get (config, &args, additional_args);
+	if (! (ret && args)) {
+		goto out;
+	}
+
+	hypervisor_args = g_strjoinv("\n", args);
+	if (! hypervisor_args) {
+		g_critical("failed to join hypervisor args");
+		goto out;
+	}
+
+	hypervisor_args_len = g_utf8_strlen(hypervisor_args,
+		LINE_MAX * g_strv_length(args));
+
+	/* first - write hypervisor length */
+	bytes = write (hypervisor_args_pipe[1], &hypervisor_args_len,
+		sizeof(hypervisor_args_len));
+	if (bytes < 0) {
+		g_critical ("failed to send hypervisor args length to child: %s",
+			strerror (errno));
+		g_free(hypervisor_args);
+		goto out;
+	}
+
+	/* second - write hypervisor args */
+	bytes = write (hypervisor_args_pipe[1], hypervisor_args,
+		(size_t)hypervisor_args_len);
+	if (bytes < 0) {
+		g_critical ("failed to send hypervisor args to child: %s",
+			strerror (errno));
+		g_free(hypervisor_args);
+		goto out;
+	}
+
+	g_free(hypervisor_args);
+
 	g_debug ("checking child setup (blocking)");
 
 	/* block reading child error state */
@@ -773,6 +835,19 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	}
 	g_debug ("child setup successful");
 
+	/* At this point ctl and tty sockets already exist,
+	 * is time to communicate with the proxy
+	 */
+	if (! cc_proxy_wait_until_ready (config)) {
+		g_critical ("failed to wait for proxy %s",
+				CC_OCI_PROXY);
+		goto child_failed;
+	}
+
+	if (! cc_shim_launch (config)) {
+		goto child_failed;
+	}
+
 	if (config->pid_file) {
 		ret = cc_oci_create_pidfile (config->pid_file,
 				config->state.workload_pid);
@@ -783,6 +858,8 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 out:
 	if (hook_status_pipe[0] != -1) close (hook_status_pipe[0]);
 	if (hook_status_pipe[1] != -1) close (hook_status_pipe[1]);
+	if (hypervisor_args_pipe[0] != -1) close (hypervisor_args_pipe[0]);
+	if (hypervisor_args_pipe[1] != -1) close (hypervisor_args_pipe[1]);
 	if (child_err_pipe[0] != -1) close (child_err_pipe[0]);
 	if (child_err_pipe[1] != -1) close (child_err_pipe[1]);
 
