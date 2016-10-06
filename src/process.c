@@ -797,8 +797,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
-	hypervisor_args_len = g_utf8_strlen(hypervisor_args,
-		LINE_MAX * g_strv_length(args));
+	hypervisor_args_len = g_utf8_strlen(hypervisor_args, -1);
 
 	/* first - write hypervisor length */
 	bytes = write (hypervisor_args_pipe[1], &hypervisor_args_len,
