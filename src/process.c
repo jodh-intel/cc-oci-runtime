@@ -559,7 +559,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	GPid               pid;
 	ssize_t            bytes;
 	char               buffer[2];
-	int                hook_status_pipe[2] = {-1, -1};
 	int                hypervisor_args_pipe[2] = {-1, -1};
 	int                child_err_pipe[2] = {-1, -1};
 	gchar            **args = NULL;
@@ -591,20 +590,14 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
-	/* Set up 2 comms channels to the child:
+	/* Set up comms channels to the child:
 	 *
-	 * - one to send the child the status of the pre-start hooks.
+	 * - one to pass the full list of expanded hypervisor arguments.
 	 *
-	 * - the other to allow detection of successful child setup: if
+	 * - one to allow detection of successful child setup: if
 	 *   the child closes the pipe, it was successful, but if it
 	 *   writes data to the pipe, setup failed.
 	 */
-
-	if (pipe (hook_status_pipe) < 0) {
-		g_critical ("failed to create hook status pipe: %s",
-				strerror (errno));
-		goto out;
-	}
 
 	if (pipe (child_err_pipe) < 0) {
 		g_critical ("failed to create child error pipe: %s",
@@ -623,7 +616,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
-	pid = config->state.workload_pid = fork ();
+	pid = config->vm->pid = fork ();
 	if (pid < 0) {
 		g_critical ("failed to create child: %s",
 				strerror (errno));
@@ -633,48 +626,10 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	if (! pid) {
 		/* child */
 
-		close (hook_status_pipe[1]);
 		close (hypervisor_args_pipe[1]);
 		close (child_err_pipe[0]);
 
 		g_debug ("reading hook status from parent");
-
-		bytes = read (hook_status_pipe[0], &hook_status, sizeof (hook_status));
-		if (bytes < 0) {
-			g_critical ("failed to read hook status from parent: %s", strerror (errno));
-			goto child_failed;
-		}
-
-		close (hook_status_pipe[0]);
-
-		g_debug ("hook status from parent: %d (%s)",
-                hook_status,
-                hook_status ? "success" : "failure");
-
-		if (! hook_status) {
-			g_critical("hooks failed, child exiting");
-			goto child_failed;
-		}
-
-		if (setup_networking) {
-			hndl = netlink_init();
-			if (hndl == NULL) {
-				g_critical("failed to setup netlink socket");
-				goto child_failed;
-			}
-
-			if (! cc_oci_vm_netcfg_get (config, hndl)) {
-				g_critical("failed to discover network configuration");
-				goto child_failed;
-			}
-
-			if (! cc_oci_network_create(config, hndl)) {
-				g_critical ("failed to create network");
-				goto child_failed;
-			}
-			g_debug ("network configuration complete");
-
-		}
 
 		/* first - read hypervisor args length */
 		g_debug ("reading hypervisor command-line length from pipe");
@@ -709,11 +664,25 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			goto child_failed;
 		}
 
-		// FIXME: add netcfg to state file
-		ret = cc_oci_state_file_create (config, timestamp);
-		if (! ret) {
-			g_critical ("failed to recreate state file");
-			goto out;
+
+		if (setup_networking) {
+			hndl = netlink_init();
+			if (hndl == NULL) {
+				g_critical("failed to setup netlink socket");
+				goto child_failed;
+			}
+
+			if (! cc_oci_vm_netcfg_get (config, hndl)) {
+				g_critical("failed to discover network configuration");
+				goto child_failed;
+			}
+
+			if (! cc_oci_network_create(config, hndl)) {
+				g_critical ("failed to create network");
+				goto child_failed;
+			}
+			g_debug ("network configuration complete");
+
 		}
 
 		g_debug ("running command:");
@@ -737,41 +706,11 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 
 	g_debug ("hypervisor child pid is %u", (unsigned)pid);
 
-	close (hook_status_pipe[0]);
-	hook_status_pipe[0] = -1;
-
 	close (hypervisor_args_pipe[0]);
 	hypervisor_args_pipe[0] = -1;
 
 	close (child_err_pipe[1]);
 	child_err_pipe[1] = -1;
-
-	/* create state file before hooks run */
-	ret = cc_oci_state_file_create (config, timestamp);
-	if (! ret) {
-		g_critical ("failed to create state file");
-		goto out;
-	}
-
-	/* If a hook returns a non-zero exit code, then an error
-	 * including the exit code and the stderr is returned to
-	 * the caller and the container is torn down.
-	 */
-	hook_status = cc_run_hooks (config->oci.hooks.prestart,
-			config->state.state_file_path,
-			true);
-
-	if (! hook_status) {
-		g_critical ("failed to run prestart hooks");
-	}
-
-	bytes = write (hook_status_pipe[1], &hook_status, sizeof (hook_status));
-	if (bytes < 0) {
-		g_critical ("failed to send hook status"
-				" to child: %s",
-				strerror (errno));
-		goto out;
-	}
 
 	g_debug ("building hypervisor command-line");
 
@@ -824,6 +763,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		ret = false;
 		goto out;
 	}
+
 	g_debug ("child setup successful");
 
 	/* At this point ctl and tty sockets already exist,
@@ -832,23 +772,43 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	if (! cc_proxy_wait_until_ready (config)) {
 		g_critical ("failed to wait for proxy %s",
 				CC_OCI_PROXY);
-		goto child_failed;
+		goto out;
 	}
 
 	if (! cc_shim_launch (config)) {
-		goto child_failed;
+		goto out;
 	}
 
 	if (config->pid_file) {
 		ret = cc_oci_create_pidfile (config->pid_file,
 				config->state.workload_pid);
-	} else {
-		ret = true;
+		if (! ret) {
+			goto out;
+		}
 	}
 
+	/* create state file before hooks run */
+	ret = cc_oci_state_file_create (config, timestamp);
+	if (! ret) {
+		g_critical ("failed to create state file");
+		goto out;
+	}
+
+	/* If a hook returns a non-zero exit code, then an error
+	 * including the exit code and the stderr is returned to
+	 * the caller and the container is torn down.
+	 */
+	hook_status = cc_run_hooks (config->oci.hooks.prestart,
+			config->state.state_file_path,
+			true);
+
+	if (! hook_status) {
+		g_critical ("failed to run prestart hooks");
+	}
+
+	ret = true;
+
 out:
-	if (hook_status_pipe[0] != -1) close (hook_status_pipe[0]);
-	if (hook_status_pipe[1] != -1) close (hook_status_pipe[1]);
 	if (hypervisor_args_pipe[0] != -1) close (hypervisor_args_pipe[0]);
 	if (hypervisor_args_pipe[1] != -1) close (hypervisor_args_pipe[1]);
 	if (child_err_pipe[0] != -1) close (child_err_pipe[0]);
