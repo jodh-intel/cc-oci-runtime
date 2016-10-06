@@ -19,6 +19,7 @@
  */
 
 #include <string.h>
+#include <sys/stat.h>
 #include <gio/gunixsocketaddress.h>
 #include "oci.h"
 #include "json.h"
@@ -132,6 +133,15 @@ cc_proxy_disconnect (struct cc_proxy *proxy)
 	return true;
 }
 
+/**
+ * Read a message from proxy's socket.
+ *
+ * \param source GIOChannel.
+ * \param condition GIOCondition.
+ * \param proxy_data struct watcher_proxy_data.
+ *
+ * \return \c false
+ */
 static gboolean
 cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
 	struct watcher_proxy_data *proxy_data)
@@ -169,6 +179,15 @@ out:
 	return false;
 }
 
+/**
+ * Write down a message into proxy's socket.
+ *
+ * \param source GIOChannel.
+ * \param condition GIOCondition.
+ * \param proxy_data struct watcher_proxy_data.
+ *
+ * \return \c false
+ */
 static gboolean
 cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
 	struct watcher_proxy_data *proxy_data)
@@ -205,6 +224,26 @@ out:
 }
 
 /**
+ * Callback used to monitor CTL socket creation
+ *
+ * \param monitor GFileMonitor.
+ * \param file GFile.
+ * \param other_file GFile.
+ * \param event_type GFileMonitorEvent.
+ * \param loop GMainLoop.
+ */
+static void
+cc_proxy_ctl_socket_created_callback(GFileMonitor *monitor, GFile *file,
+	GFile *other_file, GFileMonitorEvent event_type, GMainLoop *loop)
+{
+	if (event_type != G_FILE_MONITOR_EVENT_CREATED) {
+		g_critical("socket was not created %s",	g_file_get_path(file));
+	}
+
+	g_main_loop_quit(loop);
+}
+
+/**
  * Send the initial message to the proxy
  * which will block until it is ready. 
  *
@@ -224,6 +263,9 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	gboolean           ret = false;
 	int                fd;
 	struct watcher_proxy_data proxy_data;
+	GFile             *ctl_file = NULL;
+	GFileMonitor      *monitor = NULL;
+	struct stat        st;
 
 	if (! (proxy && proxy->socket && container_id)) {
 		return false;
@@ -270,17 +312,38 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 		goto out;
 	}
 
-	proxy_data.msg_received = g_string_new("");
-
 	g_io_channel_set_encoding (channel, NULL, NULL);
 
-	/* add socket stdin watcher */
+	/* Unfortunately launching the hypervisor does not guarantee that
+	 * CTL and TTY exist, for this reason we MUST wait for them before
+	 * writing down any message into proxy's socket
+	 */
+	ctl_file = g_file_new_for_path(proxy->agent_ctl_socket);
+
+	monitor = g_file_monitor(ctl_file, G_FILE_MONITOR_NONE, NULL, NULL);
+	if (! monitor) {
+		g_critical("failed to create a file monitor for %s",
+			proxy->agent_ctl_socket);
+		goto out;
+	}
+
+	g_signal_connect(monitor, "changed",
+		G_CALLBACK(cc_proxy_ctl_socket_created_callback), proxy_data.loop);
+
+	/* last chance, if CTL socket does not exist we MUST wait for it */
+	if (stat(proxy->agent_ctl_socket, &st)) {
+		g_main_loop_run(proxy_data.loop);
+	}
+
+	proxy_data.msg_received = g_string_new("");
+
+	/* add a watcher for proxy's socket stdin */
 	g_io_add_watch(channel, G_IO_OUT | G_IO_HUP,
 	    (GIOFunc)cc_proxy_write_msg, &proxy_data);
 
 	g_debug ("communicating with proxy");
 
-	/* run main loop */
+	/* waiting for proxy response */
 	g_main_loop_run(proxy_data.loop);
 
 	ret = true;
@@ -296,7 +359,15 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 out:
 	g_main_loop_unref (proxy_data.loop);
 	g_free (proxy_data.msg_to_send);
-	g_string_free (proxy_data.msg_received, true);
+	if (ctl_file) {
+		g_object_unref(ctl_file);
+	}
+	if (monitor) {
+		g_object_unref(monitor);
+	}
+	if (proxy_data.msg_received) {
+		g_string_free (proxy_data.msg_received, true);
+	}
 
 	return ret;
 }
