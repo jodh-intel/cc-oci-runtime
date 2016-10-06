@@ -570,7 +570,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	gboolean           hook_status = false;
 	GPtrArray         *additional_args = NULL;
 	gint               hypervisor_args_len;
-	gchar             *hypervisor_args;
+	g_autofree gchar  *hypervisor_args = NULL;
 
 	setup_networking = cc_oci_enable_networking ();
 
@@ -697,7 +697,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			(size_t)hypervisor_args_len);
 		if (bytes < 0) {
 			g_critical ("failed to read hypervisor args");
-			g_free(hypervisor_args);
 			goto child_failed;
 		}
 
@@ -707,11 +706,8 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		args = g_strsplit_set(hypervisor_args, "\n", -1);
 		if (! args) {
 			g_critical ("failed split hypervisor args");
-			g_free(hypervisor_args);
 			goto child_failed;
 		}
-
-		g_free(hypervisor_args);
 
 		// FIXME: add netcfg to state file
 		ret = cc_oci_state_file_create (config, timestamp);
@@ -805,7 +801,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	if (bytes < 0) {
 		g_critical ("failed to send hypervisor args length to child: %s",
 			strerror (errno));
-		g_free(hypervisor_args);
 		goto out;
 	}
 
@@ -815,11 +810,8 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	if (bytes < 0) {
 		g_critical ("failed to send hypervisor args to child: %s",
 			strerror (errno));
-		g_free(hypervisor_args);
 		goto out;
 	}
-
-	g_free(hypervisor_args);
 
 	g_debug ("checking child setup (blocking)");
 
