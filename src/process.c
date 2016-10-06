@@ -629,8 +629,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		close (hypervisor_args_pipe[1]);
 		close (child_err_pipe[0]);
 
-		g_debug ("reading hook status from parent");
-
 		/* first - read hypervisor args length */
 		g_debug ("reading hypervisor command-line length from pipe");
 		bytes = read (hypervisor_args_pipe[0], &hypervisor_args_len,
