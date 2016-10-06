@@ -735,7 +735,7 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 	vm = json_object_new ();
 
 	json_object_set_int_member (vm, "pid",
-			(unsigned)config->state.hypervisor_pid);
+			(unsigned)config->vm->pid);
 
 	json_object_set_string_member (vm, "hypervisor_path",
 			config->vm->hypervisor_path);

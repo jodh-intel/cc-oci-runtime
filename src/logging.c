@@ -520,7 +520,7 @@ void cc_oci_setup_hypervisor_logs (struct cc_oci_config *config)
 	}
 
 	/* ensure that current pid is the hypervisor */
-	if (config->state.hypervisor_pid != getpid ()) {
+	if (config->vm->pid != getpid ()) {
 		return;
 	}
 

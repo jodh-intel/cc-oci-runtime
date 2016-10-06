@@ -443,9 +443,6 @@ struct cc_oci_container_state {
 	 */
 	gchar procsock_path[PATH_MAX];
 
-	/** Process ID of hypervisor. */
-	GPid hypervisor_pid;
-
 	/** Process ID of of the OCI workload (in fact the PID
 	 * of CC_OCI_SHIM).
 	 *
