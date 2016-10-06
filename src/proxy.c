@@ -84,7 +84,7 @@ cc_proxy_connect (struct cc_proxy *proxy)
 
 	ret = g_socket_connect (proxy->socket, addr, NULL, &error);
 	if (! ret) {
-		g_critical ("failed to connect to socket %s: %s",
+		g_critical ("failed to connect to proxy socket %s: %s",
 				path,
 				error->message);
 		g_error_free (error);
