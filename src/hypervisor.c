@@ -183,8 +183,6 @@ cc_oci_expand_cmdline (struct cc_oci_config *config,
 		goto out;
 	}
 
-	proxy = &config->proxy;
-
 	/* We're about to launch the hypervisor so validate paths.*/
 
 	if ((!config->vm->image_path[0])
@@ -302,6 +300,8 @@ cc_oci_expand_cmdline (struct cc_oci_config *config,
 	}
 
 	procsock_device = g_strdup_printf ("socket,id=procsock,path=%s,server,nowait", config->state.procsock_path);
+
+	proxy = config->proxy = g_malloc0 (sizeof (struct cc_proxy));
 
 	proxy->agent_ctl_socket = g_build_path ("/", config->state.runtime_path,
 					CC_OCI_AGENT_CTL_SOCKET, NULL);

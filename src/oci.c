@@ -1828,6 +1828,11 @@ cc_oci_config_update (struct cc_oci_config *config,
 		state->vm = NULL;
 	}
 
+	if (state->proxy) {
+		config->proxy = state->proxy;
+		state->proxy = NULL;
+	}
+
 	if (state->procsock_path) {
 		/* No need to do a full transfer */
 		g_strlcpy (config->state.procsock_path,

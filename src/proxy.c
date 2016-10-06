@@ -311,20 +311,20 @@ out:
 gboolean
 cc_proxy_wait_until_ready (struct cc_oci_config *config)
 {
-	if (! config) {
+	if (! (config && config->proxy)) {
 		return false;
 	}
 
-	if (! cc_proxy_connect (&config->proxy)) {
+	if (! cc_proxy_connect (config->proxy)) {
 		return false;
 	}
 
-	if (! cc_proxy_hello (&config->proxy,
+	if (! cc_proxy_hello (config->proxy,
 		config->optarg_container_id)) {
 		return false;
 	}
 
-	if (! cc_proxy_disconnect (&config->proxy)) {
+	if (! cc_proxy_disconnect (config->proxy)) {
 		return false;
 	}
 

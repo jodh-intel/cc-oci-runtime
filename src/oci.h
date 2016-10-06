@@ -482,12 +482,6 @@ struct cc_oci_mount {
  * Representation of a connect to \ref CC_OCI_PROXY.
  */
 struct cc_proxy {
-	// FIXME: not needed - hard-coded.
-#if 0
-	/** Full path to socket used to connect to \ref CC_OCI_PROXY. */
-	gchar *path;
-#endif
-
 	/** Socket connection used to communicate with \ref
 	 * CC_OCI_PROXY.
 	 */
@@ -554,7 +548,7 @@ struct cc_oci_config {
 	/** If \c true, don't wait for hypervisor process to finish. */
 	gboolean detached_mode;
 
-	struct cc_proxy proxy;
+	struct cc_proxy *proxy;
 };
 
 gboolean cc_oci_attach(struct cc_oci_config *config,

@@ -762,10 +762,10 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 	proxy = json_object_new ();
 
 	json_object_set_string_member (proxy, "ctlSocket",
-			config->proxy.agent_ctl_socket);
+			config->proxy->agent_ctl_socket);
 
 	json_object_set_string_member (proxy, "ioSocket",
-			config->proxy.agent_tty_socket);
+			config->proxy->agent_tty_socket);
 
 	json_object_set_object_member (obj, "proxy", proxy);
 
