@@ -685,7 +685,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			goto child_failed;
 		}
 
-		hypervisor_args = g_new0(gchar, hypervisor_args_len);
+		hypervisor_args = g_new0(gchar, 1+hypervisor_args_len);
 		if (! hypervisor_args) {
 			g_critical ("failed alloc memory for hypervisor args");
 			goto child_failed;
