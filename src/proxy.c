@@ -24,6 +24,14 @@
 #include "json.h"
 #include "common.h"
 
+struct watcher_proxy_data
+{
+	GMainLoop   *loop;
+	GIOChannel  *channel;
+	gchar       *msg_to_send;
+	GString     *msg_received;
+};
+
 /**
  * Connect to CC_OCI_PROXY.
  *
@@ -124,39 +132,9 @@ cc_proxy_disconnect (struct cc_proxy *proxy)
 	return true;
 }
 
-static gboolean cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
-	const gchar* msg)
-{
-	gsize bytes_written = 0;
-//	GIOStatus status;
-	gsize len = 0;
-
-	if (condition == G_IO_HUP) {
-		g_io_channel_unref(source);
-		goto out;
-	}
-
-	/* FIXME: Do not use strlen! */
-	len = strlen(msg);
-
-	g_debug("writing message to proxy socket: %s", msg);
-
-	//do {
-		/*status =*/ g_io_channel_write_chars(source, msg,
-				(gssize)len, &bytes_written, NULL);
-	//}while(status == G_IO_STATUS_NORMAL && len != bytes_written );
-
-	g_io_channel_flush(source, NULL);
-
-out:
-	/* unregister this watcher */
-	return false;
-}
-
-static GMainLoop         *loop;
-
-static gboolean cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
-	GString* msg)
+static gboolean
+cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
+	struct watcher_proxy_data *proxy_data)
 {
 	GIOStatus status;
 	gchar buffer[LINE_MAX];
@@ -177,13 +155,51 @@ static gboolean cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
 		if (status != G_IO_STATUS_NORMAL) {
 			break;
 		}
-		g_string_append_len(msg, buffer, (gssize)bytes_read);
+		g_string_append_len(proxy_data->msg_received,
+				buffer, (gssize)bytes_read);
 	}
 
-	g_debug("message read from proxy socket: %s", msg->str);
+	g_debug("message read from proxy socket: %s",
+			proxy_data->msg_received->str);
 
 out:
-	g_main_loop_quit(loop);
+	g_main_loop_quit (proxy_data->loop);
+
+	/* unregister this watcher */
+	return false;
+}
+
+static gboolean
+cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
+	struct watcher_proxy_data *proxy_data)
+{
+	gsize bytes_written = 0;
+	gsize len = 0;
+
+	if (condition == G_IO_HUP) {
+		g_io_channel_unref(source);
+		goto out;
+	}
+
+	/* FIXME: Do not use strlen! */
+	len = strlen(proxy_data->msg_to_send);
+
+	g_debug("writing message to proxy socket: %s",
+			proxy_data->msg_to_send);
+
+	g_io_channel_write_chars(source,
+			proxy_data->msg_to_send,
+			(gssize)len, &bytes_written, NULL);
+
+	g_io_channel_flush(source, NULL);
+
+	/* Now we've sent the initial negotiation message,
+	 * register a handler to wait for a reply.
+	 */
+	g_io_add_watch(source, G_IO_IN | G_IO_HUP,
+	    (GIOFunc)cc_proxy_read_msg, proxy_data);
+
+out:
 	/* unregister this watcher */
 	return false;
 }
@@ -204,18 +220,17 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	JsonObject        *data = NULL;
 	JsonNode          *root = NULL;
 	JsonGenerator     *generator = NULL;
-	g_autofree gchar  *msg = NULL;
-	GString           *msg_read = NULL;
 	GIOChannel        *channel = NULL;
 	gboolean           ret = false;
 	int                fd;
+	struct watcher_proxy_data proxy_data;
 
 	if (! (proxy && proxy->socket && container_id)) {
 		return false;
 	}
 
-	loop = g_main_loop_new (NULL, false);
-	if (! loop) {
+	proxy_data.loop = g_main_loop_new (NULL, false);
+	if (! proxy_data.loop) {
 		g_critical("failed to create main loop");
 		return false;
 	}
@@ -245,7 +260,7 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 
 	json_generator_set_root (generator, root);
 	g_object_set (generator, "pretty", FALSE, NULL);
-	msg = json_generator_to_data (generator, NULL);
+	proxy_data.msg_to_send = json_generator_to_data (generator, NULL);
 
 	fd = g_socket_get_fd (proxy->socket);
 
@@ -255,20 +270,18 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 		goto out;
 	}
 
-	msg_read = g_string_new("");
+	proxy_data.msg_received = g_string_new("");
 
 	g_io_channel_set_encoding (channel, NULL, NULL);
 
 	/* add socket stdin watcher */
-	g_io_add_watch(channel, G_IO_IN | G_IO_HUP,
-	    (GIOFunc)cc_proxy_write_msg, msg);
-
-	/* add socket stdout watcher */
 	g_io_add_watch(channel, G_IO_OUT | G_IO_HUP,
-	    (GIOFunc)cc_proxy_read_msg, &msg_read);
+	    (GIOFunc)cc_proxy_write_msg, &proxy_data);
+
+	g_debug ("communicating with proxy");
 
 	/* run main loop */
-	g_main_loop_run(loop);
+	g_main_loop_run(proxy_data.loop);
 
 	ret = true;
 
@@ -281,8 +294,10 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	}
 
 out:
-	g_string_free(msg_read, true);
-	g_main_loop_unref(loop);
+	g_main_loop_unref (proxy_data.loop);
+	g_free (proxy_data.msg_to_send);
+	g_string_free (proxy_data.msg_received, true);
+
 	return ret;
 }
 
