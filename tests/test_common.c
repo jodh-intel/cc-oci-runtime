@@ -186,6 +186,7 @@ test_helper_create_state_file (const char *name,
 		struct cc_oci_config *config)
 {
 	g_autofree gchar *timestamp = NULL;
+	struct cc_proxy *proxy = NULL;
 
 	assert (name);
 	assert (root_dir);
@@ -224,7 +225,7 @@ test_helper_create_state_file (const char *name,
 	/* config->vm not set */
 	if (cc_oci_state_file_create (config, timestamp)) {
 		fprintf (stderr, "ERROR: cc_oci_state_file_create "
-				"worked unexpectedly for vm %s", name);
+				"worked unexpectedly for vm %s (no config->vm)\n", name);
 		return false;
 	}
 
@@ -243,9 +244,30 @@ test_helper_create_state_file (const char *name,
 	g_strlcpy (config->vm->workload_path, "workload-path",
 			sizeof (config->vm->workload_path));
 
+	/* set pid to ourselves so we know it's running */
+	config->vm->pid = getpid ();
+
+	/* config->proxy->* not set */
+	if (cc_oci_state_file_create (config, timestamp)) {
+		fprintf (stderr, "ERROR: cc_oci_state_file_create "
+				"worked unexpectedly for vm %s (no config->proxy)\n", name);
+		return false;
+	}
 	config->vm->kernel_params = g_strdup_printf ("kernel params for %s", name);
 
-	/* config->vm now set */
+	assert (config->proxy);
+	proxy = config->proxy;
+
+	proxy->socket = g_socket_new (G_SOCKET_FAMILY_UNIX,
+			G_SOCKET_TYPE_STREAM,
+			G_SOCKET_PROTOCOL_DEFAULT,
+			NULL);
+	ck_assert (proxy->socket);
+
+	proxy->agent_ctl_socket = g_strdup ("agent-ctl-socket");
+	proxy->agent_tty_socket = g_strdup ("agent-tty-socket");
+
+	/* config->vm and config->proxy now set */
 	if (! cc_oci_state_file_create (config, timestamp)) {
 		fprintf (stderr, "ERROR: cc_oci_state_file_create "
 				"failed unexpectedly");
@@ -255,4 +277,3 @@ test_helper_create_state_file (const char *name,
 
 	return true;
 }
-
