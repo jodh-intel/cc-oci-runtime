@@ -230,13 +230,16 @@ START_TEST(test_cc_oci_state_file_create) {
 
 	config->vm->kernel_params = g_strdup ("kernel params");
 
-	/* All required elements now set */
 	m = g_new0(struct cc_oci_mount, 1);
 	g_snprintf(m->dest, sizeof(m->dest), "/tmp/tmp/tmp");
 	m->directory_created = g_strdup("/tmp/tmp/");
 	m->ignore_mount = true;
 	config->oci.mounts = g_slist_append(config->oci.mounts, m);
 
+	config->proxy->agent_ctl_socket = g_strdup ("ctl-socket");
+	config->proxy->agent_tty_socket = g_strdup ("tty-socket");
+
+	/* All required elements now set */
 	ck_assert (cc_oci_state_file_create (config, timestamp));
 
 	ret = g_file_test (config->state.state_file_path,
