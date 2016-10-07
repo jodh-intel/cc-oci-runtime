@@ -52,6 +52,7 @@ START_TEST(test_cc_oci_config_check) {
 	config->oci.oci_version = g_strdup ("9999.9999.9999");
 	ck_assert (! cc_oci_config_check (config));
 
+	g_free (config->oci.oci_version);
 	config->oci.oci_version = g_strdup ("0.0.1");
 	ck_assert (cc_oci_config_check (config));
 
