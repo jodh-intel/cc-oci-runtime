@@ -1187,26 +1187,7 @@ cc_oci_start (struct cc_oci_config *config,
 				&data);
 	}
 
-	/* "create" left the VM in a stopped state, so now let it
-	 * continue.
-	 *
-	 * This will result in \ref CC_OCI_PROCESS_SOCKET being
-	 * created, however there will be a delay. Since we wish to
-	 * connect to this socket, the approach is to use an inotify
-	 * watch to wait for the socket file to exist, then connect to
-	 * it.
-	 */
-	if (kill (pid, SIGCONT) < 0) {
-		g_critical ("failed to start VM %s: %s",
-				config->optarg_container_id,
-				strerror (errno));
-		return false;
-	}
-
-	g_debug ("activated VM %s (pid %d)",
-			config->optarg_container_id,
-			(int)pid);
-
+	// FIXME: start pod and run workload, then set this status.
 	/* Now the VM is running */
 	config->state.status = OCI_STATUS_RUNNING;
 
