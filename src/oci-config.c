@@ -105,7 +105,12 @@ cc_oci_config_file_path (const gchar *bundle_path)
 			CC_OCI_CONFIG_FILE);
 }
 
-// FIXME: document
+/*!
+ * Create a new \ref cc_oci_config object.
+ *
+ * \return Newly-allocated \ref cc_oci_config on success,
+ * else \c NULL.
+ */
 struct cc_oci_config *
 cc_oci_config_create (void)
 {
