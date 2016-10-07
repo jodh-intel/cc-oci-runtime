@@ -234,8 +234,11 @@ START_TEST(test_cc_oci_expand_cmdline) {
 	gchar *image_size = g_strdup_printf ("%lu",
 			(unsigned long int)sizeof(image_contents)-1);
 	gchar *shell;
+	struct cc_proxy *proxy = NULL;
 	g_autofree gchar *cc_stdin = NULL;
 	g_autofree gchar *cc_stdout = NULL;
+	g_autofree gchar *proxy_ctl_socket_path = NULL;
+	g_autofree gchar *proxy_tty_socket_path = NULL;
 
 	struct cc_oci_config *config = NULL;
 
@@ -310,6 +313,11 @@ START_TEST(test_cc_oci_expand_cmdline) {
 	ck_assert (! config->console);
 	ck_assert (! config->bundle_path);
 
+	ck_assert (config->proxy);
+	proxy = config->proxy;
+	ck_assert (! proxy->agent_ctl_socket);
+	ck_assert (! proxy->agent_tty_socket);
+
 	ck_assert (! cc_oci_expand_cmdline (config, args));
 
 	config->bundle_path = g_strdup (tmpdir);
@@ -323,6 +331,20 @@ START_TEST(test_cc_oci_expand_cmdline) {
 	/* console should have been set */
 	ck_assert (config->console);
 	g_free (config->console);
+
+	/* proxy details should have been set */
+	ck_assert (proxy->agent_ctl_socket);
+	ck_assert (proxy->agent_tty_socket);
+
+	proxy_ctl_socket_path = g_build_path ("/",
+			config->state.runtime_path,
+			"ga-ctl.sock", NULL);
+	ck_assert (! g_strcmp0 (proxy->agent_ctl_socket, proxy_ctl_socket_path));
+
+	proxy_tty_socket_path = g_build_path ("/",
+			config->state.runtime_path,
+			"ga-tty.sock", NULL);
+	ck_assert (! g_strcmp0 (proxy->agent_tty_socket, proxy_tty_socket_path));
 
 	/* ensure no expansion took place */
 	ck_assert (! g_strcmp0 (args[0], ""));
