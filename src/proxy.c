@@ -236,10 +236,7 @@ static void
 cc_proxy_ctl_socket_created_callback(GFileMonitor *monitor, GFile *file,
 	GFile *other_file, GFileMonitorEvent event_type, GMainLoop *loop)
 {
-	if (event_type != G_FILE_MONITOR_EVENT_CREATED) {
-		g_critical("socket was not created %s",	g_file_get_path(file));
-	}
-
+	g_debug("CTL created event: %d", event_type);
 	g_main_loop_quit(loop);
 }
 
