@@ -42,7 +42,7 @@ START_TEST(test_cc_oci_get_priv_level) {
 	gchar                 *tmpdir_enoent = g_build_path ("/", tmpdir, "foo", NULL);
 
 	config = cc_oci_config_create ();
-    ck_assert (config);
+	ck_assert (config);
 
 	sub.name = "help";
 	ck_assert (cc_oci_get_priv_level (argc, argv, &sub, config) == -1);
@@ -74,7 +74,7 @@ START_TEST(test_cc_oci_get_priv_level) {
 		ck_assert (cc_oci_get_priv_level (argc, argv, &sub, config) == 0);
 	}
 
-    g_free (config->root_dir);
+	g_free (config->root_dir);
 	config->root_dir = g_strdup (tmpdir);
 
 	ck_assert (cc_oci_get_priv_level (argc, argv, &sub, config) == 0);
@@ -91,6 +91,8 @@ START_TEST(test_cc_oci_get_priv_level) {
 
 	/* make directory accessible once again */
 	ck_assert (! g_chmod (tmpdir, 0755));
+
+	g_free (config->root_dir);
 
 	/* specify a non-existing directory */
 	config->root_dir = g_strdup (tmpdir_enoent);
