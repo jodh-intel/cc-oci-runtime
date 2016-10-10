@@ -190,15 +190,7 @@ cc_oci_config_free (struct cc_oci_config *config)
                 (GDestroyNotify)cc_oci_net_interface_free);
 	}
 
-	if (config->proxy) {
-		g_free_if_set (config->proxy->agent_ctl_socket);
-		g_free_if_set (config->proxy->agent_tty_socket);
-		if (config->proxy->socket) {
-			g_object_unref (config->proxy->socket);
-		}
-
-		g_free (config->proxy);
-	}
+	cc_proxy_free (config->proxy);
 
 	g_free (config);
 }
