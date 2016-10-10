@@ -24,6 +24,8 @@
 #include "oci.h"
 #include "json.h"
 #include "common.h"
+#include "proxy.h"
+#include "util.h"
 
 struct watcher_proxy_data
 {
@@ -32,6 +34,28 @@ struct watcher_proxy_data
 	gchar       *msg_to_send;
 	GString     *msg_received;
 };
+
+/**
+ * Free resources associated with \p proxy.
+ *
+ * \param proxy \ref cc_proxy.
+ *
+ */
+void
+cc_proxy_free (struct cc_proxy *proxy) {
+	if (! proxy) {
+		return;
+	}
+
+	g_free_if_set (proxy->agent_ctl_socket);
+	g_free_if_set (proxy->agent_tty_socket);
+
+	if (proxy->socket) {
+		g_object_unref (proxy->socket);
+	}
+
+	g_free (proxy);
+}
 
 /**
  * Connect to CC_OCI_PROXY.
