@@ -34,7 +34,8 @@
 #include "../src/logging.h"
 #include "../src/runtime.h"
 #include "../src/state.h"
-#include "../src/oci.h"
+#include "../src/proxy.h"
+
 
 gboolean cc_oci_vm_running (const struct oci_state *state);
 gboolean cc_oci_create_container_workload (struct cc_oci_config *config);
@@ -1014,9 +1015,12 @@ START_TEST(test_set_env_home) {
 
 
 START_TEST(test_cc_oci_kill) {
-	struct cc_oci_config *config_tmp = NULL;
-	struct cc_oci_config *config = NULL;
 	struct cc_oci_config *config_new = NULL;
+	struct cc_oci_config *config = NULL;
+
+	/* used to create a state file */
+	struct cc_oci_config *config_tmp = NULL;
+
 	struct oci_state *state = NULL;
 	struct oci_state *state_new = NULL;
 	gboolean ret;
@@ -1070,10 +1074,14 @@ START_TEST(test_cc_oci_kill) {
 
 	config->optarg_container_id = config_tmp->optarg_container_id;
 
+	ck_assert (! config->proxy);
+
 	ck_assert (cc_oci_get_config_and_state (&config_file,
 				config, &state));
 
 	ck_assert (cc_oci_config_update (config, state));
+
+	ck_assert (config->proxy);
 
 	ck_assert (state->pid == config_tmp->state.workload_pid);
 
