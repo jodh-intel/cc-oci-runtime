@@ -178,17 +178,15 @@ cc_oci_expand_cmdline (struct cc_oci_config *config,
 		goto out;
 	}
 
-	if (! config->proxy) {
-		g_critical ("No proxy");
-		goto out;
-	}
-
 	if (! config->bundle_path) {
 		g_critical ("No bundle path");
 		goto out;
 	}
 
-	proxy = config->proxy;
+	if (config->proxy) {
+		g_critical ("proxy already set");
+		goto out;
+	}
 
 	/* We're about to launch the hypervisor so validate paths.*/
 
@@ -308,20 +306,20 @@ cc_oci_expand_cmdline (struct cc_oci_config *config,
 
 	procsock_device = g_strdup_printf ("socket,id=procsock,path=%s,server,nowait", config->state.procsock_path);
 
-	/* the proxy values are not expected to be set normally, but
-	 * the check simplifies the tests.
-	 */
-	if (! proxy->agent_ctl_socket) {
-		proxy->agent_ctl_socket = g_build_path ("/", config->state.runtime_path,
-				CC_OCI_AGENT_CTL_SOCKET, NULL);
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	if (! config->proxy) {
+		goto out;
 	}
+
+	proxy = config->proxy;
+
+	proxy->agent_ctl_socket = g_build_path ("/", config->state.runtime_path,
+			CC_OCI_AGENT_CTL_SOCKET, NULL);
 
 	g_debug("guest agent ctl socket: %s", proxy->agent_ctl_socket);
 
-	if (! proxy->agent_tty_socket) {
-		proxy->agent_tty_socket = g_build_path("/", config->state.runtime_path,
-				CC_OCI_AGENT_TTY_SOCKET, NULL);
-	}
+	proxy->agent_tty_socket = g_build_path("/", config->state.runtime_path,
+			CC_OCI_AGENT_TTY_SOCKET, NULL);
 
 	g_debug("guest agent tty socket: %s", proxy->agent_tty_socket);
 
