@@ -1146,8 +1146,7 @@ cc_oci_start (struct cc_oci_config *config,
 				return false;
 			}
 
-			/* create inotify watch on runtime directory
-			 * (crucially before the VM is resumed).
+			/* create inotify watch on runtime directory.
 			 */
 			monitor = g_file_monitor(file, G_FILE_MONITOR_NONE, NULL, &error);
 			if (! monitor) {
