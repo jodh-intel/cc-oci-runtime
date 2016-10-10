@@ -25,7 +25,7 @@
 #include <gio/gio.h>
 #include "oci.h"
 
-gboolean cc_proxy_wait_until_ready (struct cc_oci_config *config);
+gboolean cc_proxy_hyper_pod_create (struct cc_oci_config *config);
 void cc_proxy_free (struct cc_proxy *proxy);
 
 #endif /* _CC_OCI_PROXY_H */

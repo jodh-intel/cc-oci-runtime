@@ -265,6 +265,70 @@ cc_proxy_ctl_socket_created_callback(GFileMonitor *monitor, GFile *file,
 }
 
 /**
+ * Determine if the hyper command was run successfully.
+ *
+ * Accomplished by checking the proxy response message which is
+ * of the form:
+ *
+ *     {"success": [true|false] }
+ *
+ * \param data \ref watcher_proxy_data.
+ * \param proxy_success \c true if the last proxy command was
+ * successful, else \c false.
+ *
+ * \return \c true if the proxy response could be checked,
+ * else \c false.
+ */
+static gboolean
+cc_proxy_hyper_check_response (const struct watcher_proxy_data *data,
+		gboolean *proxy_success)
+{
+	JsonParser  *parser = NULL;
+	JsonReader  *reader = NULL;
+	GError      *error = NULL;
+	gboolean     ret;
+
+	if (! (data && data->msg_received)) {
+		return false;
+	}
+
+	parser = json_parser_new ();
+	reader = json_reader_new (NULL);
+
+	ret = json_parser_load_from_data (parser,
+			data->msg_received->str,
+			(gssize)data->msg_received->len,
+			&error);
+
+	if (! ret) {
+		g_critical ("failed to parse proxy response: %s",
+				error->message);
+		g_error_free (error);
+		goto out;
+	}
+
+	json_reader_set_root (reader, json_parser_get_root (parser));
+
+	ret = json_reader_read_member (reader, "success");
+	if (! ret) {
+		g_critical ("failed to find proxy response");
+		goto out;
+	}
+
+	*proxy_success = json_reader_get_boolean_value (reader);
+
+	json_reader_end_member (reader);
+
+	ret = true;
+
+out:
+	if (reader) g_object_unref (reader);
+	if (parser) g_object_unref (parser);
+
+	return ret;
+}
+
+/**
  * Send the initial message to the proxy
  * which will block until it is ready. 
  *
@@ -367,6 +431,12 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	/* waiting for proxy response */
 	g_main_loop_run(proxy_data.loop);
 
+	/* FIXME */
+#if 0
+	ret = cc_proxy_hyper_check_response (proxy_data,
+			&hyper_success);
+#endif
+
 	ret = true;
 
 	if (obj) {
@@ -400,14 +470,10 @@ out:
  *
  * \return \c true on success, else \c false.
  */
-gboolean
+static gboolean
 cc_proxy_wait_until_ready (struct cc_oci_config *config)
 {
 	if (! (config && config->proxy)) {
-		return false;
-	}
-
-	if (! cc_proxy_connect (config->proxy)) {
 		return false;
 	}
 
@@ -416,9 +482,136 @@ cc_proxy_wait_until_ready (struct cc_oci_config *config)
 		return false;
 	}
 
+	return true;
+}
+
+/**
+ * Run a Hyper command via the \ref CC_OCI_PROXY.
+ *
+ * \note Must already be connected to the proxy.
+ *
+ * \param config \ref cc_oci_config.
+ * \param cmd Name of hyper command to run.
+ * \param data payload to pass to \p cmd (optional).
+ *
+ * \return \c true on success, else \c false.
+ */
+// FIXME: payload should probably be a JsonObject.
+static gboolean
+cc_proxy_run_hyper_cmd (struct cc_oci_config *config,
+		const char *cmd, const char *payload)
+{
+	struct cc_proxy   *proxy;
+	JsonObject        *obj = NULL;
+	JsonObject        *data = NULL;
+	JsonNode          *root = NULL;
+	JsonGenerator     *generator = NULL;
+	g_autofree gchar  *msg = NULL;
+	gboolean           ret = false;
+
+	/* data is optional */
+	if (! (config && cmd)) {
+		return false;
+	}
+
+	proxy = config->proxy;
+
+	if (! proxy->socket) {
+		g_critical ("no proxy connection");
+		return false;
+	}
+
+	obj = json_object_new ();
+	data = json_object_new ();
+
+	/* tell the proxy to run in pass-through mode and forward
+	 * the request on to hyperstart in the VM.
+	 */
+	json_object_set_string_member (obj, "id", "hyper");
+
+	/* add the hyper command name and the data to pass to the
+	 * command.
+	 */
+	json_object_set_string_member (data, cmd, payload);
+
+	json_object_set_object_member (obj, "data", data);
+
+	root = json_node_new (JSON_NODE_OBJECT);
+	generator = json_generator_new ();
+	json_node_take_object (root, obj);
+
+	json_generator_set_root (generator, root);
+	g_object_set (generator, "pretty", FALSE, NULL);
+	msg = json_generator_to_data (generator, NULL);
+
+	// FIXME: call cc_proxy_hyper_check_response().
+
+	ret = true;
+
+//out:
+	if (obj) {
+		json_object_unref (obj);
+	}
+	
+	return ret;
+}
+
+/**
+ * Request \ref CC_OCI_PROXY create a new POD (container group).
+ *
+ * \note Must already be connected to the proxy.
+ *
+ * \param config \ref cc_oci_config.
+ *
+ * \return \c true on success, else \c false.
+ */
+gboolean
+cc_proxy_hyper_pod_create (struct cc_oci_config *config)
+{
+	g_autofree gchar *msg = NULL;
+
+	if (! (config && config->proxy)) {
+		return false;
+	}
+
+	if (! cc_proxy_connect (config->proxy)) {
+		return false;
+	}
+
+	if (! cc_proxy_wait_until_ready (config)) {
+		goto err;
+	}
+
+	// FIXME: TODO:
+	//
+	// - construct POD JSON.
+	// - move main loop in cc_proxy_hello() to here so
+	//   cc_proxy_wait_until_ready() and cc_proxy_run_hyper_cmd()
+	//   can share it (along with the watcher code to check for
+	//   successful proxy command execution).
+#if 1
+	g_critical ("FIXME: %s not implemented yet", __func__);
+
+#else
+	if (! cc_oci_hyper_pod_payload (config, &msg)) {
+		g_critical ("failed to create POD payload");
+		goto err;
+	}
+
+	if (! cc_proxy_run_hyper_cmd (config,
+				"STARTPOD", msg)) {
+		return false;
+	}
+#endif
+
 	if (! cc_proxy_disconnect (config->proxy)) {
 		return false;
 	}
 
 	return true;
+
+err:
+	cc_proxy_disconnect (config->proxy);
+
+	return false;
 }
