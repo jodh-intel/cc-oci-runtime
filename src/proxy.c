@@ -224,8 +224,7 @@ cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
 		goto out;
 	}
 
-	/* FIXME: Do not use strlen! */
-	len = strlen(proxy_data->msg_to_send);
+	len = g_utf8_strlen(proxy_data->msg_to_send, -1);
 
 	g_debug("writing message to proxy socket: %s",
 			proxy_data->msg_to_send);
@@ -280,7 +279,7 @@ cc_proxy_ctl_socket_created_callback(GFileMonitor *monitor, GFile *file,
  * else \c false.
  */
 static gboolean
-cc_proxy_hyper_check_response (const struct watcher_proxy_data *data,
+cc_proxy_hyper_check_response (const GString *response,
 		gboolean *proxy_success)
 {
 	JsonParser  *parser = NULL;
@@ -288,7 +287,7 @@ cc_proxy_hyper_check_response (const struct watcher_proxy_data *data,
 	GError      *error = NULL;
 	gboolean     ret;
 
-	if (! (data && data->msg_received)) {
+	if (! response) {
 		return false;
 	}
 
@@ -296,8 +295,8 @@ cc_proxy_hyper_check_response (const struct watcher_proxy_data *data,
 	reader = json_reader_new (NULL);
 
 	ret = json_parser_load_from_data (parser,
-			data->msg_received->str,
-			(gssize)data->msg_received->len,
+			response->str,
+			(gssize)response->len,
 			&error);
 
 	if (! ret) {
@@ -328,6 +327,65 @@ out:
 	return ret;
 }
 
+
+/**
+ * Run any command via the \ref CC_OCI_PROXY.
+ *
+ * \param proxy \ref cc_proxy.
+ * \param msg_to_send gchar.
+ * \param msg_received GString.
+ *
+ * \return \c true on success, else \c false.
+ */
+static gboolean
+cc_proxy_run_cmd(struct cc_proxy *proxy, gchar *msg_to_send, GString* msg_received)
+{
+	GIOChannel        *channel = NULL;
+	int                fd;
+	struct watcher_proxy_data proxy_data;
+	gboolean ret;
+
+	if (! proxy->socket) {
+		g_critical ("no proxy connection");
+		return false;
+	}
+
+	proxy_data.loop = g_main_loop_new (NULL, false);
+
+	proxy_data.msg_to_send = msg_to_send;
+
+	fd = g_socket_get_fd (proxy->socket);
+
+	channel = g_io_channel_unix_new(fd);
+	if (! channel) {
+		g_critical("failed to create I/O channel");
+		goto out;
+	}
+
+	g_io_channel_set_encoding (channel, NULL, NULL);
+
+	proxy_data.msg_received = msg_received;
+
+	/* add a watcher for proxy's socket stdin */
+	g_io_add_watch(channel, G_IO_OUT | G_IO_HUP,
+	    (GIOFunc)cc_proxy_write_msg, &proxy_data);
+
+	g_debug ("communicating with proxy");
+
+	/* waiting for proxy response */
+	g_main_loop_run(proxy_data.loop);
+
+	ret = true;
+
+out:
+	g_main_loop_unref (proxy_data.loop);
+	g_free (proxy_data.msg_to_send);
+	if (channel) {
+		g_io_channel_unref(channel);
+	}
+	return ret;
+}
+
 /**
  * Send the initial message to the proxy
  * which will block until it is ready. 
@@ -344,21 +402,11 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	JsonObject        *data = NULL;
 	JsonNode          *root = NULL;
 	JsonGenerator     *generator = NULL;
-	GIOChannel        *channel = NULL;
+	gchar             *msg_to_send = NULL;
+	GString           *msg_received = NULL;
 	gboolean           ret = false;
-	int                fd;
-	struct watcher_proxy_data proxy_data;
-	GFile             *ctl_file = NULL;
-	GFileMonitor      *monitor = NULL;
-	struct stat        st;
 
 	if (! (proxy && proxy->socket && container_id)) {
-		return false;
-	}
-
-	proxy_data.loop = g_main_loop_new (NULL, false);
-	if (! proxy_data.loop) {
-		g_critical("failed to create main loop");
 		return false;
 	}
 
@@ -387,81 +435,36 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 
 	json_generator_set_root (generator, root);
 	g_object_set (generator, "pretty", FALSE, NULL);
-	proxy_data.msg_to_send = json_generator_to_data (generator, NULL);
 
-	fd = g_socket_get_fd (proxy->socket);
+	msg_to_send = json_generator_to_data (generator, NULL);
 
-	channel = g_io_channel_unix_new(fd);
-	if (! channel) {
-		g_critical("failed to create I/O channel");
+	msg_received = g_string_new("");
+
+	if (! cc_proxy_run_cmd(proxy, msg_to_send, msg_received)) {
+		g_critical("failed to run proxy hello %s", msg_received->str);
 		goto out;
 	}
 
-	g_io_channel_set_encoding (channel, NULL, NULL);
-
-	/* Unfortunately launching the hypervisor does not guarantee that
-	 * CTL and TTY exist, for this reason we MUST wait for them before
-	 * writing down any message into proxy's socket
-	 */
-	ctl_file = g_file_new_for_path(proxy->agent_ctl_socket);
-
-	monitor = g_file_monitor(ctl_file, G_FILE_MONITOR_NONE, NULL, NULL);
-	if (! monitor) {
-		g_critical("failed to create a file monitor for %s",
-			proxy->agent_ctl_socket);
-		goto out;
-	}
-
-	g_signal_connect(monitor, "changed",
-		G_CALLBACK(cc_proxy_ctl_socket_created_callback), proxy_data.loop);
-
-	/* last chance, if CTL socket does not exist we MUST wait for it */
-	if (stat(proxy->agent_ctl_socket, &st)) {
-		g_main_loop_run(proxy_data.loop);
-	}
-
-	proxy_data.msg_received = g_string_new("");
-
-	/* add a watcher for proxy's socket stdin */
-	g_io_add_watch(channel, G_IO_OUT | G_IO_HUP,
-	    (GIOFunc)cc_proxy_write_msg, &proxy_data);
-
-	g_debug ("communicating with proxy");
-
-	/* waiting for proxy response */
-	g_main_loop_run(proxy_data.loop);
-
-	/* FIXME */
-#if 0
-	ret = cc_proxy_hyper_check_response (proxy_data,
-			&hyper_success);
-#endif
+	g_debug("msg received: %s", msg_received->str);
 
 	ret = true;
 
+	/* FIXME */
+#if 0
+	ret = cc_proxy_hyper_check_response (msg_received,
+			&hyper_success);
+#endif
+out:
+	if (msg_received) {
+		g_string_free(msg_received, true);
+	}
 	if (obj) {
 		json_object_unref (obj);
 	}
 
-	if (channel) {
-		g_io_channel_unref(channel);
-	}
-
-out:
-	g_main_loop_unref (proxy_data.loop);
-	g_free (proxy_data.msg_to_send);
-	if (ctl_file) {
-		g_object_unref(ctl_file);
-	}
-	if (monitor) {
-		g_object_unref(monitor);
-	}
-	if (proxy_data.msg_received) {
-		g_string_free (proxy_data.msg_received, true);
-	}
-
 	return ret;
 }
+
 
 /**
  * Connect to \ref CC_OCI_PROXY and wait until it is ready.
@@ -473,13 +476,52 @@ out:
 static gboolean
 cc_proxy_wait_until_ready (struct cc_oci_config *config)
 {
+	GFile             *ctl_file = NULL;
+	GFileMonitor      *monitor = NULL;
+	GMainLoop         *loop = NULL;
+	struct stat        st;
+
 	if (! (config && config->proxy)) {
 		return false;
 	}
 
-	if (! cc_proxy_hello (config->proxy,
-		config->optarg_container_id)) {
+	/* Unfortunately launching the hypervisor does not guarantee that
+	 * CTL and TTY exist, for this reason we MUST wait for them before
+	 * writing down any message into proxy's socket
+	 */
+	if (stat(config->proxy->agent_ctl_socket, &st)) {
+		loop = g_main_loop_new (NULL, false);
+
+		ctl_file = g_file_new_for_path( config->proxy->agent_ctl_socket);
+
+		monitor = g_file_monitor(ctl_file, G_FILE_MONITOR_NONE, NULL, NULL);
+		if (! monitor) {
+			g_critical("failed to create a file monitor for %s",
+				 config->proxy->agent_ctl_socket);
+			goto out;
+		}
+
+		g_signal_connect(monitor, "changed",
+			G_CALLBACK(cc_proxy_ctl_socket_created_callback), loop);
+
+		/* last chance, if CTL socket does not exist we MUST wait for it */
+		if (stat(config->proxy->agent_ctl_socket, &st)) {
+			g_main_loop_run(loop);
+		}
+	}
+
+	if (! cc_proxy_hello (config->proxy, config->optarg_container_id)) {
 		return false;
+	}
+out:
+	if (loop) {
+		g_main_loop_unref(loop);
+	}
+	if (ctl_file) {
+		g_object_unref(ctl_file);
+	}
+	if (monitor) {
+		g_object_unref(monitor);
 	}
 
 	return true;
@@ -501,23 +543,16 @@ static gboolean
 cc_proxy_run_hyper_cmd (struct cc_oci_config *config,
 		const char *cmd, const char *payload)
 {
-	struct cc_proxy   *proxy;
 	JsonObject        *obj = NULL;
 	JsonObject        *data = NULL;
 	JsonNode          *root = NULL;
 	JsonGenerator     *generator = NULL;
-	g_autofree gchar  *msg = NULL;
 	gboolean           ret = false;
+	gchar             *msg_to_send = NULL;
+	GString           *msg_received = NULL;
 
 	/* data is optional */
 	if (! (config && cmd)) {
-		return false;
-	}
-
-	proxy = config->proxy;
-
-	if (! proxy->socket) {
-		g_critical ("no proxy connection");
 		return false;
 	}
 
@@ -542,17 +577,30 @@ cc_proxy_run_hyper_cmd (struct cc_oci_config *config,
 
 	json_generator_set_root (generator, root);
 	g_object_set (generator, "pretty", FALSE, NULL);
-	msg = json_generator_to_data (generator, NULL);
+
+	msg_to_send = json_generator_to_data (generator, NULL);
+
+	msg_received = g_string_new("");
+
+	if (! cc_proxy_run_cmd(config->proxy, msg_to_send, msg_received)) {
+		g_critical("failed to run hyper cmd %s", msg_received->str);
+		goto out;
+	}
+
+	g_debug("msg received: %s", msg_received->str);
 
 	// FIXME: call cc_proxy_hyper_check_response().
 
 	ret = true;
 
-//out:
+out:
+	if (msg_received) {
+		g_string_free(msg_received, true);
+	}
 	if (obj) {
 		json_object_unref (obj);
 	}
-	
+
 	return ret;
 }
 
@@ -568,7 +616,12 @@ cc_proxy_run_hyper_cmd (struct cc_oci_config *config,
 gboolean
 cc_proxy_hyper_pod_create (struct cc_oci_config *config)
 {
-	g_autofree gchar *msg = NULL;
+	JsonObject        *data = NULL;
+	JsonArray         *array = NULL;
+	JsonNode          *root = NULL;
+	JsonGenerator     *generator = NULL;
+	gchar             *msg_to_send = NULL;
+	gboolean           ret = false;
 
 	if (! (config && config->proxy)) {
 		return false;
@@ -579,39 +632,50 @@ cc_proxy_hyper_pod_create (struct cc_oci_config *config)
 	}
 
 	if (! cc_proxy_wait_until_ready (config)) {
-		goto err;
+		goto out;
 	}
 
-	// FIXME: TODO:
-	//
-	// - construct POD JSON.
-	// - move main loop in cc_proxy_hello() to here so
-	//   cc_proxy_wait_until_ready() and cc_proxy_run_hyper_cmd()
-	//   can share it (along with the watcher code to check for
-	//   successful proxy command execution).
-#if 1
-	g_critical ("FIXME: %s not implemented yet", __func__);
+	/* json stanza for create pod (STARTPOD without containers)*/
+	data = json_object_new ();
 
-#else
-	if (! cc_oci_hyper_pod_payload (config, &msg)) {
-		g_critical ("failed to create POD payload");
-		goto err;
+	json_object_set_string_member (data, "hostname",
+		config->optarg_container_id);
+
+	/* FIXME: missing interfaces, routes, dns,
+	 * portmappingWhiteLists, externalNetworks ?
+	 */
+
+	array = json_array_new();
+
+	json_object_set_array_member(data, "containers", array);
+
+	json_object_set_string_member (data, "hostname",
+		config->optarg_container_id);
+
+	json_object_set_string_member (data, "shareDir", "rootfs");
+
+	root = json_node_new (JSON_NODE_OBJECT);
+	generator = json_generator_new ();
+	json_node_take_object (root, data);
+
+	json_generator_set_root (generator, root);
+	g_object_set (generator, "pretty", FALSE, NULL);
+
+	msg_to_send = json_generator_to_data (generator, NULL);
+
+	if (! cc_proxy_run_hyper_cmd (config, "STARTPOD", msg_to_send)) {
+		g_critical("failed to run pod create");
+		goto out;
 	}
 
-	if (! cc_proxy_run_hyper_cmd (config,
-				"STARTPOD", msg)) {
-		return false;
-	}
-#endif
+	ret = true;
 
-	if (! cc_proxy_disconnect (config->proxy)) {
-		return false;
+out:
+	if (data) {
+		json_object_unref (data);
 	}
 
-	return true;
-
-err:
 	cc_proxy_disconnect (config->proxy);
 
-	return false;
+	return ret;
 }
