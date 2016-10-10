@@ -263,7 +263,11 @@ test_helper_create_state_file (const char *name,
 	}
 	config->vm->kernel_params = g_strdup_printf ("kernel params for %s", name);
 
+	assert (! config->proxy);
+
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
 	assert (config->proxy);
+
 	proxy = config->proxy;
 
 	proxy->socket = g_socket_new (G_SOCKET_FAMILY_UNIX,
