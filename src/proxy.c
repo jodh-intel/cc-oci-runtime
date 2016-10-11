@@ -259,6 +259,10 @@ static void
 cc_proxy_ctl_socket_created_callback(GFileMonitor *monitor, GFile *file,
 	GFile *other_file, GFileMonitorEvent event_type, GMainLoop *loop)
 {
+	(void)monitor;
+	(void)file;
+	(void)other_file;
+
 	g_debug("CTL created event: %d", event_type);
 	g_main_loop_quit(loop);
 }
