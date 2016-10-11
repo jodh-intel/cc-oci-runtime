@@ -341,12 +341,17 @@ out:
  * \return \c true on success, else \c false.
  */
 static gboolean
-cc_proxy_run_cmd(struct cc_proxy *proxy, gchar *msg_to_send, GString* msg_received)
+cc_proxy_run_cmd(struct cc_proxy *proxy,
+		gchar *msg_to_send,
+		GString* msg_received)
 {
 	GIOChannel        *channel = NULL;
 	int                fd;
 	struct watcher_proxy_data proxy_data;
-	gboolean ret;
+
+	if (! (proxy && msg_to_send && msg_received)) {
+		return false;
+	}
 
 	if (! proxy->socket) {
 		g_critical ("no proxy connection");
