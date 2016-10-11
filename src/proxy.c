@@ -291,7 +291,7 @@ cc_proxy_hyper_check_response (const GString *response,
 	GError      *error = NULL;
 	gboolean     ret;
 
-	if (! response) {
+	if (! (response && proxy_success)) {
 		return false;
 	}
 
@@ -330,7 +330,6 @@ out:
 
 	return ret;
 }
-
 
 /**
  * Run any command via the \ref CC_OCI_PROXY.
