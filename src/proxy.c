@@ -637,6 +637,7 @@ cc_proxy_hyper_pod_create (struct cc_oci_config *config)
 	}
 
 	if (! cc_proxy_wait_until_ready (config)) {
+		g_critical ("failed to wait for proxy %s", CC_OCI_PROXY);
 		goto out;
 	}
 
