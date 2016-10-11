@@ -768,8 +768,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	 * is time to communicate with the proxy
 	 */
 	if (! cc_proxy_hyper_pod_create (config)) {
-		g_critical ("failed to wait for proxy %s",
-				CC_OCI_PROXY);
 		goto out;
 	}
 
