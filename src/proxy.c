@@ -409,6 +409,11 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	GString           *msg_received = NULL;
 	gboolean           ret = false;
 
+	/* The name of the command used to initiate communicate
+	 * with the proxy.
+	 */
+	const gchar       *proxy_cmd = "hello";
+
 	if (! (proxy && proxy->socket && container_id)) {
 		return false;
 	}
@@ -416,10 +421,7 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	obj = json_object_new ();
 	data = json_object_new ();
 
-	/* "hello" is the command used to initiate communicate with the
-	 * proxy.
-	 */
-	json_object_set_string_member (obj, "id", "hello");
+	json_object_set_string_member (obj, "id", proxy_cmd);
 
 	json_object_set_string_member (data, "containerId",
 			container_id);
