@@ -494,7 +494,7 @@ cc_shim_launch (struct cc_oci_config *config)
 	gboolean      ret = false;
 	GPid          pid;
 	GSpawnFlags   flags = 0;
-	gchar        *args[] = {CC_OCI_SHIM, NULL};
+	gchar       **args = NULL;
 	GError       *error = NULL;
 
 	if (! config) {
@@ -505,13 +505,22 @@ cc_shim_launch (struct cc_oci_config *config)
 	flags |= G_SPAWN_DO_NOT_REAP_CHILD;
 	flags |= G_SPAWN_SEARCH_PATH;
 
+	/* +1 for for NULL terminator */
+	args = g_new0 (gchar *, 5+1);
+	args[0] = g_strdup (CC_OCI_SHIM);
+	args[1] = g_strdup ("-c");
+	args[2] = g_strdup (config->optarg_container_id);
+	args[3] = g_strdup ("-p");
+	args[4] = g_strdup_printf ("%d",
+			g_socket_get_fd (config->proxy->socket));
+
 	g_debug ("running command:");
 	for (gchar** p = args; p && *p; p++) {
 		g_debug ("arg: '%s'", *p);
 	}
 
 	if (! cc_oci_setup_child (config)) {
-		return false;
+		goto out;
 	}
 
 	ret = g_spawn_async_with_pipes(NULL, /* wd */
@@ -529,7 +538,7 @@ cc_shim_launch (struct cc_oci_config *config)
 	if (! ret) {
 		g_critical ("failed to spawn shim: %s",
 				error->message);
-		return false;
+		goto out;
 	}
 
 	/* Inform caller of workload PID */
@@ -538,8 +547,11 @@ cc_shim_launch (struct cc_oci_config *config)
 	g_debug ("shim process ('%s') running with pid %d",
 			args[0], (int)pid);
 
+	ret = true;
 
-	return true;
+out:
+	g_strfreev (args);
+	return ret;
 }
 
 /*!
