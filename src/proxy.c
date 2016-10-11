@@ -273,7 +273,7 @@ cc_proxy_ctl_socket_created_callback(GFileMonitor *monitor, GFile *file,
  * Accomplished by checking the proxy response message which is
  * of the form:
  *
- *     {"success": [true|false] }
+ *     {"success": [true|false], "error": "an explanation" }
  *
  * \param data \ref watcher_proxy_data.
  * \param proxy_success \c true if the last proxy command was
