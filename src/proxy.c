@@ -553,10 +553,9 @@ out:
  *
  * \return \c true on success, else \c false.
  */
-// FIXME: payload should probably be a JsonObject.
 static gboolean
 cc_proxy_run_hyper_cmd (struct cc_oci_config *config,
-		const char *cmd, const char *payload)
+		const char *cmd, JsonObject *payload)
 {
 	JsonObject        *obj = NULL;
 	JsonObject        *data = NULL;
@@ -582,7 +581,8 @@ cc_proxy_run_hyper_cmd (struct cc_oci_config *config,
 	/* add the hyper command name and the data to pass to the
 	 * command.
 	 */
-	json_object_set_string_member (data, cmd, payload);
+	json_object_set_string_member (data, "hyperName", cmd);
+	json_object_set_object_member (data, "data", payload);
 
 	json_object_set_object_member (obj, "data", data);
 
@@ -633,9 +633,6 @@ cc_proxy_hyper_pod_create (struct cc_oci_config *config)
 {
 	JsonObject        *data = NULL;
 	JsonArray         *array = NULL;
-	JsonNode          *root = NULL;
-	JsonGenerator     *generator = NULL;
-	gchar             *msg_to_send = NULL;
 	gboolean           ret = false;
 
 	if (! (config && config->proxy)) {
@@ -670,16 +667,7 @@ cc_proxy_hyper_pod_create (struct cc_oci_config *config)
 
 	json_object_set_string_member (data, "shareDir", "rootfs");
 
-	root = json_node_new (JSON_NODE_OBJECT);
-	generator = json_generator_new ();
-	json_node_take_object (root, data);
-
-	json_generator_set_root (generator, root);
-	g_object_set (generator, "pretty", FALSE, NULL);
-
-	msg_to_send = json_generator_to_data (generator, NULL);
-
-	if (! cc_proxy_run_hyper_cmd (config, "STARTPOD", msg_to_send)) {
+	if (! cc_proxy_run_hyper_cmd (config, "startpod", data)) {
 		g_critical("failed to run pod create");
 		goto out;
 	}
