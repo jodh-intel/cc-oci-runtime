@@ -348,6 +348,8 @@ cc_proxy_run_cmd(struct cc_proxy *proxy,
 	GIOChannel        *channel = NULL;
 	int                fd;
 	struct watcher_proxy_data proxy_data;
+	gboolean ret = false;
+	gboolean hyper_result = false;
 
 	if (! (proxy && msg_to_send && msg_received)) {
 		return false;
@@ -383,7 +385,13 @@ cc_proxy_run_cmd(struct cc_proxy *proxy,
 	/* waiting for proxy response */
 	g_main_loop_run(proxy_data.loop);
 
-	ret = true;
+	if (! cc_proxy_hyper_check_response (msg_received,
+			&hyper_result)) {
+		g_critical ("failed to check proxy response");
+		ret = false;
+	} else {
+		ret = hyper_result;
+	}
 
 out:
 	g_main_loop_unref (proxy_data.loop);
@@ -451,19 +459,16 @@ cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
 	msg_received = g_string_new("");
 
 	if (! cc_proxy_run_cmd(proxy, msg_to_send, msg_received)) {
-		g_critical("failed to run proxy hello %s", msg_received->str);
+		g_critical("failed to run proxy command %s: %s",
+				proxy_cmd,
+				msg_received->str);
 		goto out;
 	}
 
-	g_debug("msg received: %s", msg_received->str);
-
 	ret = true;
 
-	/* FIXME */
-#if 0
-	ret = cc_proxy_hyper_check_response (msg_received,
-			&hyper_success);
-#endif
+	g_debug("msg received: %s", msg_received->str);
+
 out:
 	if (msg_received) {
 		g_string_free(msg_received, true);
@@ -593,13 +598,13 @@ cc_proxy_run_hyper_cmd (struct cc_oci_config *config,
 	msg_received = g_string_new("");
 
 	if (! cc_proxy_run_cmd(config->proxy, msg_to_send, msg_received)) {
-		g_critical("failed to run hyper cmd %s", msg_received->str);
+		g_critical("failed to run hyper cmd %s: %s",
+				cmd,
+				msg_received->str);
 		goto out;
 	}
 
 	g_debug("msg received: %s", msg_received->str);
-
-	// FIXME: call cc_proxy_hyper_check_response().
 
 	ret = true;
 
