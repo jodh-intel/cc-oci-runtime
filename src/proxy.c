@@ -58,30 +58,47 @@ cc_proxy_free (struct cc_proxy *proxy) {
 }
 
 /**
+ * Determine if already connected to the proxy.
+ *
+ * \return \c true if connected, else \c false.
+ */
+static inline gboolean
+cc_proxy_connected (struct cc_proxy *proxy)
+{
+	return proxy->socket ? true : false;
+}
+
+/* FIXME */
+#if 1
+void show_fds(void);
+#endif
+
+/**
  * Connect to CC_OCI_PROXY.
  *
  * \param proxy \ref cc_proxy.
  *
  * \return \c true on success, else \c false.
  */
-private gboolean
+gboolean
 cc_proxy_connect (struct cc_proxy *proxy)
 {
 	GSocketAddress *addr;
 	GError *error = NULL;
 	gboolean ret = false;
 	const gchar *path = NULL;
+	int fd = -1;
 
 	if (! proxy) {
 		return false;
 	}
 
-	if (proxy->socket) {
+	if (cc_proxy_connected (proxy)) {
 		g_critical ("already connected to proxy");
 		return false;
 	}
 
-	g_debug ("connecting to proxy");
+	g_debug ("connecting to proxy %s", CC_OCI_PROXY);
 
 	addr = g_unix_socket_address_new (CC_OCI_PROXY_SOCKET);
 	if (! addr) {
@@ -91,6 +108,8 @@ cc_proxy_connect (struct cc_proxy *proxy)
 	}
 
 	path = g_unix_socket_address_get_path (G_UNIX_SOCKET_ADDRESS (addr));
+
+	g_critical ("FIXME:%s:%d: path=%s", __func__, __LINE__, path);
 
 	proxy->socket = g_socket_new (G_SOCKET_FAMILY_UNIX,
 				      G_SOCKET_TYPE_STREAM,
@@ -104,8 +123,27 @@ cc_proxy_connect (struct cc_proxy *proxy)
 		goto out_socket;
 	}
 
+	g_critical ("FIXME:%s:%d: proxy->socket=%p", __func__, __LINE__,
+			(void *)proxy->socket);
+
 	/* block on write and read */
 	g_socket_set_blocking (proxy->socket, TRUE);
+
+	/* FIXME */
+#if 1
+	show_fds ();
+#endif
+
+	fd = g_socket_get_fd (proxy->socket);
+
+	g_critical ("FIXME:%s:%d: proxy socket fd=%d", __func__, __LINE__,
+			fd);
+
+	ret = cc_oci_fd_set_cloexec (fd);
+	if (! ret) {
+		g_critical ("failed to set close-exec bit on proxy socket");
+		goto out;
+	}
 
 	ret = g_socket_connect (proxy->socket, addr, NULL, &error);
 	if (! ret) {
@@ -120,6 +158,7 @@ cc_proxy_connect (struct cc_proxy *proxy)
 
 	ret = true;
 
+out:
 	return ret;
 
 out_connect:
@@ -137,24 +176,36 @@ out_addr:
  *
  * \return \c true on success, else \c false.
  */
-private gboolean
+gboolean
 cc_proxy_disconnect (struct cc_proxy *proxy)
 {
+	GError   *error = NULL;
+	gboolean   ret = false;
+
 	if (! proxy) {
 		return false;
 	}
 
-	if (! proxy->socket) {
+	if (! cc_proxy_connected (proxy)) {
 		g_critical ("not connected to proxy");
-		return false;
+		return ret;
 	}
 
 	g_debug ("disconnecting from proxy");
 
-	g_socket_close (proxy->socket, NULL);
+	if (! g_socket_close (proxy->socket, &error)) {
+		g_critical ("failed to disconnect from proxy: %s",
+		    error->message);
+		g_error_free(error);
+		goto out;
+	}
+
+	ret = true;
+
+out:
 	g_clear_object (&proxy->socket);
 
-	return true;
+	return ret;
 }
 
 /**
@@ -366,6 +417,9 @@ cc_proxy_run_cmd(struct cc_proxy *proxy,
 
 	fd = g_socket_get_fd (proxy->socket);
 
+	// FIXME
+	g_critical ("FIXME:%s:%d: proxy fd=%d", __func__, __LINE__, fd);
+
 	channel = g_io_channel_unix_new(fd);
 	if (! channel) {
 		g_critical("failed to create I/O channel");
@@ -488,7 +542,7 @@ out:
  *
  * \return \c true on success, else \c false.
  */
-static gboolean
+gboolean
 cc_proxy_wait_until_ready (struct cc_oci_config *config)
 {
 	GFile             *ctl_file = NULL;
@@ -496,7 +550,8 @@ cc_proxy_wait_until_ready (struct cc_oci_config *config)
 	GMainLoop         *loop = NULL;
 	struct stat        st;
 
-	if (! (config && config->proxy)) {
+	if (! (config && config->proxy
+				&& config->proxy->agent_ctl_socket)) {
 		return false;
 	}
 
@@ -639,15 +694,6 @@ cc_proxy_hyper_pod_create (struct cc_oci_config *config)
 		return false;
 	}
 
-	if (! cc_proxy_connect (config->proxy)) {
-		return false;
-	}
-
-	if (! cc_proxy_wait_until_ready (config)) {
-		g_critical ("failed to wait for proxy %s", CC_OCI_PROXY);
-		goto out;
-	}
-
 	/* json stanza for create pod (STARTPOD without containers)*/
 	data = json_object_new ();
 
@@ -678,8 +724,6 @@ out:
 	if (data) {
 		json_object_unref (data);
 	}
-
-	cc_proxy_disconnect (config->proxy);
 
 	return ret;
 }

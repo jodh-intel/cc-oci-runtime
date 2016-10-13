@@ -60,7 +60,13 @@
 #define HYPERVISOR_STDOUT_FILE "hypervisor.stdout"
 #define HYPERVISOR_STDERR_FILE "hypervisor.stderr"
 
+#define SHIM_STDOUT_FILE "shim.stdout"
+#define SHIM_STDERR_FILE "shim.stderr"
+
 static gchar* hypervisor_log_dir;
+
+// FIXME: add option
+static gchar* shim_log_dir = "/tmp";
 
 /*!
  * Last-ditch logging routine which sends an error
@@ -82,14 +88,25 @@ cc_oci_error (const char *file,
 		const char *fmt,
 		...)
 {
-	gchar    buffer[CC_OCI_LOG_BUFSIZE];
-	va_list  ap;
-	int      ret;
+	gchar            buffer[CC_OCI_LOG_BUFSIZE];
+	va_list          ap;
+	int              ret;
+	static gboolean  initialised = FALSE;
 
 	g_assert (file);
 	g_assert (line_number >= 0);
 	g_assert (function);
 	g_assert (fmt);
+
+	if (! initialised) {
+		int syslog_options = (LOG_CONS | LOG_PID | LOG_PERROR |
+				LOG_NOWAIT);
+
+		/* setup the fallback logging */
+		openlog (G_LOG_DOMAIN, syslog_options, LOG_LOCAL0);
+
+		initialised = TRUE;
+	}
 
 	va_start (ap, fmt);
 
@@ -319,8 +336,7 @@ cc_oci_log_handler (const gchar *log_domain,
 	const gchar                  *level = NULL;;
 	gchar                        *final = NULL;
 	gchar                        *timestamp = NULL;
-	const struct cc_log_options *options;
-	static gboolean               initialised = FALSE;
+	const struct cc_log_options  *options;
 	gboolean                      ret;
 
 	g_assert (message);
@@ -342,16 +358,6 @@ cc_oci_log_handler (const gchar *log_domain,
 		 * still logged to that logfile.
 		 */
 		return;
-	}
-
-	if (! initialised) {
-		int syslog_options = (LOG_CONS | LOG_PID | LOG_PERROR |
-				LOG_NOWAIT);
-
-		/* setup the fallback logging */
-		openlog (G_LOG_DOMAIN, syslog_options, LOG_LOCAL0);
-
-		initialised = TRUE;
 	}
 
 	switch (log_level) {
@@ -538,6 +544,76 @@ void cc_oci_setup_hypervisor_logs (struct cc_oci_config *config)
 
 		/* creating log file
 		 * i.e: $hypervisor_log_dir/$containerId-hypervidor.stdout
+		 */
+		int std_file_fd = g_creat(std_file_path, CC_OCI_LOGFILE_MODE);
+
+		if (std_file_fd < 0) {
+			g_critical("failed to create file: %s", std_file_path);
+			return;
+		}
+
+		/* redirecting stdout/stderr to a file */
+		if (dup2(std_file_fd, i->std_fd) < 0) {
+			g_critical("failed to dup %s : %s", std_file_path, strerror(errno));
+		}
+
+		/* Close unused file descriptor */
+		close (std_file_fd);
+	}
+}
+
+/**
+ *
+ * Setup shim logs
+ *
+ * redirect shim's stdout and stderr to $containerId-shim.stdout and
+ * $containerId-shim.stderr respectively. Directory where log files will
+ * be created can be specified with --shim-log-dir option, if not path is
+ * provided shim output won't be logged therefore will be ignored
+ *
+ * \param config \ref cc_oci_config.
+ */
+void cc_oci_setup_shim_logs (struct cc_oci_config *config)
+{
+	const struct qemu_log_file {
+		const gchar *path;
+		const int std_fd;
+	} qemu_log_files[] = {
+		{ SHIM_STDOUT_FILE, STDOUT_FILENO },
+		{ SHIM_STDERR_FILE, STDERR_FILENO },
+		{ NULL }
+	};
+
+	if (! config) {
+		return;
+	}
+
+	/* ensure that we have a directory for hypervisor logs */
+	if (! shim_log_dir) {
+		return;
+	}
+
+	/* ensure that current pid is the hypervisor */
+	if (config->state.workload_pid != getpid ()) {
+		return;
+	}
+
+#if 0
+	if (g_mkdir_with_parents(shim_log_dir, CC_OCI_DIR_MODE)) {
+		g_critical("failed to create shim log directory '%s'",
+			shim_log_dir);
+		return;
+	}
+#endif
+
+	for (const struct qemu_log_file *i = qemu_log_files; i && i->path; ++i) {
+		g_autofree gchar* std_file_name = g_strjoin("-", config->optarg_container_id,
+			i->path, NULL);
+		g_autofree gchar* std_file_path = g_build_path ("/", shim_log_dir,
+			std_file_name, NULL);
+
+		/* creating log file
+		 * i.e: $shim_log_dir/$containerId-shim.stdout
 		 */
 		int std_file_fd = g_creat(std_file_path, CC_OCI_LOGFILE_MODE);
 

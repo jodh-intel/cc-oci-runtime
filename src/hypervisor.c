@@ -183,8 +183,8 @@ cc_oci_expand_cmdline (struct cc_oci_config *config,
 		goto out;
 	}
 
-	if (config->proxy) {
-		g_critical ("proxy already set");
+	if (! config->proxy) {
+		g_critical ("No proxy");
 		goto out;
 	}
 
@@ -305,11 +305,6 @@ cc_oci_expand_cmdline (struct cc_oci_config *config,
 	}
 
 	procsock_device = g_strdup_printf ("socket,id=procsock,path=%s,server,nowait", config->state.procsock_path);
-
-	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
-	if (! config->proxy) {
-		goto out;
-	}
 
 	proxy = config->proxy;
 

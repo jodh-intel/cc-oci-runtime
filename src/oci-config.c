@@ -122,6 +122,12 @@ cc_oci_config_create (void)
 		return NULL;
 	}
 
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	if (! config->proxy) {
+		g_free (config);
+		return NULL;
+	}
+
 	return config;
 }
 

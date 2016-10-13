@@ -250,6 +250,11 @@ setup_logging (struct cc_log_options *options)
 	return cc_oci_log_init (options);
 }
 
+/* FIXME */
+#if 1
+void show_fds(void);
+#endif
+
 /*!
  * Handle all arguments and options (global and sub-commands).
  *
@@ -378,6 +383,11 @@ handle_arguments (int argc, char **argv)
 		g_debug ("called as: %s %s", program_name, str);
 		g_free (str);
 	}
+
+	/* FIXME */
+#if 1
+	show_fds ();
+#endif
 
 	/* Now, deal with the sub-commands
 	 * (and their corresponding options)

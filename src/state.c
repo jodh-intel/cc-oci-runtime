@@ -674,7 +674,8 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 	if (! config->vm) {
 		return false;
 	}
-	if (! (config->proxy && config->proxy->agent_tty_socket && config->proxy->agent_ctl_socket)) {
+
+	if (! (config->proxy)) {
 		return false;
 	}
 
