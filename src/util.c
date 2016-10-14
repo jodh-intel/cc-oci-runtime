@@ -539,6 +539,33 @@ cc_oci_fd_set_cloexec (int fd)
 }
 
 /**
+ * Determine if the specified file descriptor is valid.
+ *
+ * \param fd File desciptor to check.
+ *
+ * \return \c true if \p fd is valid, else \c false.
+ */
+gboolean
+cc_oci_fd_valid (int fd)
+{
+	int flags;
+
+	if (fd < 0) {
+		return false;
+	}
+
+	errno = 0;
+
+	flags = fcntl (fd, F_GETFL);
+
+	if (flags <= 0 || errno == EBADF) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
  * Determine if networking setup should occur.
  *
  * \return \c true if networking should be enabled, else \c false.
