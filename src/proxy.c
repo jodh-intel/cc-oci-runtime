@@ -131,6 +131,7 @@ cc_proxy_connect (struct cc_proxy *proxy)
 
 	/* FIXME */
 #if 1
+	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
 	show_fds ();
 #endif
 

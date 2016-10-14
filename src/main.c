@@ -25,10 +25,6 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <syslog.h>
 
 #include "util.h"
 #include "logging.h"
@@ -36,6 +32,7 @@
 #include "oci-config.h"
 #include "priv.h"
 #include "proxy.h"
+#include "util.h"
 
 /* globals */
 static char *program_name;
@@ -391,6 +388,7 @@ handle_arguments (int argc, char **argv)
 
 	/* FIXME */
 #if 1
+	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
 	show_fds ();
 #endif
 
@@ -436,48 +434,9 @@ cleanup (struct cc_log_options *options)
 static void
 setup (void)
 {
-	int          fds[] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
-	int          fd;
-	int          devnull = -1;
-	const gchar  path[] = "/dev/null";
-
-	/* Some environments the runtime is launched in don't provide
-	 * standard streams (fds[0-2] may be closed).
-	 *
-	 * To simplify the later file descriptor handling, ensure that
-	 * the standard streams are either valid, or set to /dev/null.
-	 */
-	for (fd = 0;
-	     fd < (int)(sizeof (fds)/sizeof (fds[0]));
-	     fd++) {
-		if (! cc_oci_fd_valid (fd)) {
-			int ret;
-
-			if (devnull == -1) {
-				devnull = open (path,
-						O_RDWR | O_NOCTTY);
-				if (devnull == -1) {
-					syslog (LOG_ERR, "ERROR: unable to open %s: %s", path, strerror (errno));
-					goto error;
-				}
-			}
-
-			ret = dup2 (devnull, fd);
-			if (ret < 0) {
-				syslog (LOG_ERR, "ERROR: failed to dup %s to fd %d: %s", path, fd, strerror (errno));
-				goto error;
-			}
-		}
+	if (! cc_oci_set_std_fds ()) {
+		exit (EXIT_FAILURE);
 	}
-
-	if (devnull != -1) {
-		close (devnull);
-	}
-
-	return;
-
-error:
-	exit (EXIT_FAILURE);
 }
 
 /** Entry point. */

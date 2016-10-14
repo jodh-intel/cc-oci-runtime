@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <syslog.h>
 
 #include <glib.h>
 #include <glib/gprintf.h>
@@ -563,6 +564,65 @@ cc_oci_fd_valid (int fd)
 	}
 
 	return true;
+}
+
+/* Set standard streams to /dev/null if not already open.
+ *
+ * Some environments the runtime is launched in don't provide
+ * standard streams (in fact fds[0-2] may be closed).
+ *
+ * To simplify later file descriptor handling, ensure that
+ * the standard streams are either valid, or set to /dev/null.
+ *
+ * \note If this function fails, it logs to syslog since the
+ * standard streams may be unavailable to write to.
+ *
+ * \return \c true on success, else false.
+ */
+gboolean
+cc_oci_set_std_fds (void)
+{
+	gboolean     ret = false;
+	int          devnull = -1;
+	int          fd = -1;
+	int          fds[] = {STDIN_FILENO,
+			      STDOUT_FILENO,
+			      STDERR_FILENO};
+	const gchar  path[] = "/dev/null";
+
+	for (fd = 0;
+	     fd < (int)(sizeof (fds)/sizeof (fds[0]));
+	     fd++) {
+		// FIXME:
+		//if (! cc_oci_fd_valid (fd)) {
+		if (fd == 0 || ! cc_oci_fd_valid (fd)) {
+			int ret;
+
+			if (devnull == -1) {
+				devnull = open (path,
+						O_RDWR | O_NOCTTY);
+				if (devnull == -1) {
+					syslog (LOG_ERR, "ERROR: unable to open %s: %s", path, strerror (errno));
+					goto out;
+				}
+			}
+
+			ret = dup2 (devnull, fd);
+			if (ret < 0) {
+				syslog (LOG_ERR, "ERROR: failed to dup %s to fd %d: %s", path, fd, strerror (errno));
+				goto out;
+			}
+		}
+	}
+
+	ret = true;
+
+out:
+	if (devnull != -1) {
+		close (devnull);
+	}
+
+	return ret;
 }
 
 /**

@@ -158,37 +158,6 @@ cc_oci_close_fds (void) {
 	return true;
 }
 
-#if 0
-static void
-cc_oci_show_fds (void) {
-	char           *fd_dir = "/proc/self/fd";
-	DIR            *dir;
-	struct dirent  *ent;
-
-	dir = opendir (fd_dir);
-
-	if (! dir) {
-		return;
-	}
-
-	while ((ent = readdir (dir)) != NULL) {
-		if (! (g_strcmp0 (ent->d_name, ".") &&
-		    g_strcmp0 (ent->d_name, ".."))) {
-			continue;
-		}
-
-		g_critical ("FIXME:%s:%d: fd %s", __func__, __LINE__,
-				ent->d_name);
-	}
-
-	if (closedir (dir) < 0) {
-		return;
-	}
-
-	return;
-}
-#endif
-
 #if 1
 void
 show_fds(void)
@@ -562,8 +531,15 @@ cc_run_hook(struct oci_cfg_hook* hook, const gchar* state,
 	/* (re-)start the main loop and wait for the hook
 	 * to finish.
 	 */
-	// FIXME: this is stopping all output!
 	g_critical ("FIXME:%s:%d: hook_loop=%p", __func__, __LINE__, hook_loop);
+
+	/* FIXME */
+#if 1
+	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
+	show_fds ();
+#endif
+
+	// BUG: FIXME: this is stopping all output!
 	g_main_loop_run(hook_loop);
 
 	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
@@ -800,7 +776,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	GPtrArray         *additional_args = NULL;
 	gint               hypervisor_args_len;
 	g_autofree gchar  *hypervisor_args = NULL;
-#if 0
+#if 1
 	int                shim_err_fd = -1;
 	int                shim_args_fd = -1;
 #endif
@@ -829,6 +805,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 
 	/* FIXME */
 #if 1
+	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
 	show_fds ();
 #endif
 
@@ -862,6 +839,12 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	}
 
 	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
+
+	// FIXME
+#if 1
+	g_critical ("FIXME:%s:%d: child_err_pipe[0]=%d", __func__, __LINE__, child_err_pipe[0]);
+	g_critical ("FIXME:%s:%d: child_err_pipe[1]=%d", __func__, __LINE__, child_err_pipe[1]);
+#endif
 
 	if (! cc_oci_fd_set_cloexec (child_err_pipe[1])) {
 		g_critical ("failed to set close-exec bit on fd");
@@ -957,6 +940,19 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			g_debug ("arg: '%s'", *p);
 		}
 
+	/* FIXME */
+#if 1
+		g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
+		show_fds ();
+#endif
+
+#if 1
+	g_critical ("FIXME:%s:%d: child_err_pipe[0]=%d", __func__, __LINE__, child_err_pipe[0]);
+	g_critical ("FIXME:%s:%d: child_err_pipe[1]=%d", __func__, __LINE__, child_err_pipe[1]);
+#endif
+		g_critical ("FIXME:%s:%d: forcibly closing child_err_pipe[1]=%d", __func__, __LINE__, child_err_pipe[1]);
+		close (child_err_pipe[1]);
+
 		if (! cc_oci_setup_child (config)) {
 			goto child_failed;
 		}
@@ -982,7 +978,7 @@ child_failed:
 
 	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
-#if 0
+#if 1
 	/* Launch the shim child before the state file is created.
 	 *
 	 * Required since the state file must contain the workloads pid,
@@ -1115,6 +1111,12 @@ child_failed:
 
 	g_critical ("FIXME:%s:%d: PARENT: read(child_err_pipe[0]=%d)", __func__, __LINE__, child_err_pipe[0]);
 
+	/* FIXME */
+#if 1
+	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
+	show_fds ();
+#endif
+
 	/* block reading child error state */
 	bytes = read (child_err_pipe[0],
 			buffer,
@@ -1141,7 +1143,7 @@ child_failed:
 	 */
 	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
-#if 0
+#if 1
 	if (! cc_proxy_wait_until_ready (config)) {
 		g_critical ("failed to wait for proxy %s", CC_OCI_PROXY);
 		goto out;
@@ -1174,7 +1176,7 @@ child_failed:
 			config->proxy->socket);
 #endif
 
-#if 0
+#if 1
 	g_debug ("sending proxy fd to shim child on fd %d", shim_args_fd);
 	bytes = write (shim_args_fd, &proxy_fd, sizeof (proxy_fd));
 	if (bytes < 0) {
@@ -1218,7 +1220,7 @@ out:
 	if (hypervisor_args_pipe[1] != -1) close (hypervisor_args_pipe[1]);
 	if (child_err_pipe[0] != -1) close (child_err_pipe[0]);
 	if (child_err_pipe[1] != -1) close (child_err_pipe[1]);
-#if 0
+#if 1
 	if (shim_err_fd != -1) close (shim_err_fd);
 	if (shim_args_fd != -1) close (shim_args_fd);
 #endif
