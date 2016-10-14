@@ -158,64 +158,6 @@ cc_oci_close_fds (void) {
 	return true;
 }
 
-#if 1
-void
-show_fds(void)
-{
-    DIR *dir;
-    struct dirent *ent;
-    struct stat st;
-    char *prefix_path = "/proc/self/fd";
-    char path[1024];
-    char link[1024];
-    int saved_errno;
-    ssize_t len;
-
-    dir = opendir(prefix_path);
-    if (!dir)
-    {
-        saved_errno = errno;
-        g_critical ("failed to open '%s'"
-                " (errno=%d [%s])",
-                prefix_path,
-                saved_errno, strerror(saved_errno));
-        exit(EXIT_FAILURE);
-    }
-
-    while ((ent=readdir(dir)) != NULL)
-    {
-        int fd;
-
-        if ( !strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..") )
-            continue;
-
-        sprintf(path, "%s/%s", prefix_path, ent->d_name);
-
-        len = readlink (path, link, sizeof (link));
-        g_assert (len);
-        link[len] = '\0';
-
-        g_critical ("fd '%s' -> '%s'", path, link);
-
-        fd = atoi(ent->d_name);
-
-        if (stat(path, &st) < 0)
-        {
-            saved_errno = errno;
-            g_critical ("ERROR: stat(%s) failed (%s [%d])",
-                    path,
-                    strerror(saved_errno), saved_errno);
-        }
-
-        if (dirfd(dir) == fd) {
-            continue;
-        }
-    }
-
-    closedir(dir);
-}
-#endif
-
 /*! Perform setup on spawned child process.
  *
  * \param config \ref cc_oci_config.
@@ -228,20 +170,10 @@ cc_oci_setup_child (struct cc_oci_config *config)
 	/* become session leader */
 	setsid ();
 
-	g_critical ("FIXME:%s:%d: pid=%d", __func__, __LINE__, (int)getpid ());
-
-	g_critical ("FIXME:%s:%d: config->detached_mode=%d", __func__, __LINE__,
-			config->detached_mode);
-
 	/* Do not close fds when VM runs in detached mode*/
 	if (! config->detached_mode) {
 		cc_oci_close_fds ();
 	}
-
-#if 0
-	// FIXME:
-	system ("touch /tmp/child-setup-done");
-#endif
 
 	cc_oci_setup_hypervisor_logs(config);
 	cc_oci_setup_shim_logs(config);
@@ -321,12 +253,7 @@ cc_oci_output_watcher(GIOChannel* channel, GIOCondition cond,
 	gchar* string = NULL;
 	gsize size;
 
-	g_critical ("FIXME:%s:%d: cond=%d, stream=%d",
-			__func__, __LINE__, (int)cond, stream);
-
 	if (cond == G_IO_HUP) {
-		g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
-		g_io_channel_unref(channel);
 		return false;
 	}
 
@@ -379,8 +306,6 @@ cc_run_hook(struct oci_cfg_hook* hook, const gchar* state,
 		/* all the hooks share the same loop */
 		return false;
 	}
-
-	g_critical ("FIXME:%s:%d: hook_loop=%p", __func__, __LINE__, hook_loop);
 
 	flags |= G_SPAWN_DO_NOT_REAP_CHILD;
 	flags |= G_SPAWN_CLOEXEC_PIPES;
@@ -456,8 +381,6 @@ cc_run_hook(struct oci_cfg_hook* hook, const gchar* state,
 			&error
 	);
 
-	g_critical ("FIXME:%s:%d: hook: stdin=%d, stdout=%d, stderr=%d", __func__, __LINE__, std_in, std_out, std_err);
-
 	/* check errors */
 	if (!ret) {
 		g_critical("failed to spawn hook");
@@ -481,40 +404,32 @@ cc_run_hook(struct oci_cfg_hook* hook, const gchar* state,
 	}
 #endif
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
-
 	/* create output channels */
 	out_ch = g_io_channel_unix_new(std_out);
 	err_ch = g_io_channel_unix_new(std_err);
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 	/* add watchers to channels */
 	if (out_ch) {
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 		g_io_add_watch(out_ch, G_IO_IN | G_IO_HUP,
 			(GIOFunc)cc_oci_output_watcher, (gint*)STDOUT_FILENO);
 	} else {
 		g_critical("failed to create out channel");
 	}
 	if (err_ch) {
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 		g_io_add_watch(err_ch, G_IO_IN | G_IO_HUP,
 			(GIOFunc)cc_oci_output_watcher, (gint*)STDERR_FILENO);
 	} else {
 		g_critical("failed to create err channel");
 	}
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 
 	/* write container state to hook's stdin */
 	container_state = g_strdup(state);
 	g_strdelimit(container_state, "\n", ' ');
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 	if (write(std_in, container_state, state_length) < 0) {
 		g_critical ("failed to send container state to hook: %s",
 				strerror (errno));
 		goto exit;
 	}
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 
 	/* commit container state to stdin */
 	if (write(std_in, "\n", 1) < 0) {
@@ -523,26 +438,16 @@ cc_run_hook(struct oci_cfg_hook* hook, const gchar* state,
 		goto exit;
 	}
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 	/* required to complete notification to hook */
 	close (std_in);
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 	/* (re-)start the main loop and wait for the hook
 	 * to finish.
 	 */
-	g_critical ("FIXME:%s:%d: hook_loop=%p", __func__, __LINE__, hook_loop);
-
-	/* FIXME */
-#if 1
-	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
-	show_fds ();
-#endif
 
 	// BUG: FIXME: this is stopping all output!
 	g_main_loop_run(hook_loop);
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
 	/* check hook exit code */
 	if (hook_exit_code != 0) {
 		g_critical("hook process %d failed with exit code: %d",
@@ -649,15 +554,6 @@ cc_shim_launch (struct cc_oci_config *config,
 
 	/* Inform caller of workload PID */
 	pid = config->state.workload_pid = fork ();
-
-	// FIXME
-#if 1
-	g_critical ("FIXME:%s:%d: child_err_pipe[0]=%d", __func__, __LINE__, child_err_pipe[0]);
-	g_critical ("FIXME:%s:%d: child_err_pipe[1]=%d", __func__, __LINE__, child_err_pipe[1]);
-
-	g_critical ("FIXME:%s:%d: shim_args_pipe[0]=%d", __func__, __LINE__, shim_args_pipe[0]);
-	g_critical ("FIXME:%s:%d: shim_args_pipe[1]=%d", __func__, __LINE__, shim_args_pipe[1]);
-#endif
 
 	if (pid < 0) {
 		g_critical ("failed to spawn shim child: %s",
@@ -801,21 +697,12 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
-
-	/* FIXME */
-#if 1
-	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
-	show_fds ();
-#endif
-
 	/* Connect to the proxy before launching the shim so that the
 	 * proxy socket fd can be passed to the shim.
 	 */
 	if (! cc_proxy_connect (config->proxy)) {
 		return false;
 	}
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
 	/* Set up comms channels to the child:
 	 *
@@ -838,14 +725,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
-
-	// FIXME
-#if 1
-	g_critical ("FIXME:%s:%d: child_err_pipe[0]=%d", __func__, __LINE__, child_err_pipe[0]);
-	g_critical ("FIXME:%s:%d: child_err_pipe[1]=%d", __func__, __LINE__, child_err_pipe[1]);
-#endif
-
 	if (! cc_oci_fd_set_cloexec (child_err_pipe[1])) {
 		g_critical ("failed to set close-exec bit on fd");
 		goto out;
@@ -863,22 +742,16 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 		goto out;
 	}
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
-
 	if (! pid) {
 		/* child */
 
 		close (hypervisor_args_pipe[1]);
 		close (child_err_pipe[0]);
 
-		g_critical ("FIXME:%s:%d: CHILD:", __func__, __LINE__);
-
 		/* The child doesn't need the proxy connection */
 		if (! cc_proxy_disconnect (config->proxy)) {
 			goto child_failed;
 		}
-
-		g_critical ("FIXME:%s:%d: CHILD:", __func__, __LINE__);
 
 		/* first - read hypervisor args length */
 		g_debug ("reading hypervisor command-line length from pipe");
@@ -913,8 +786,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			goto child_failed;
 		}
 
-		g_critical ("FIXME:%s:%d: CHILD:", __func__, __LINE__);
-
 		if (setup_networking) {
 			hndl = netlink_init();
 			if (hndl == NULL) {
@@ -940,19 +811,6 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 			g_debug ("arg: '%s'", *p);
 		}
 
-	/* FIXME */
-#if 1
-		g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
-		show_fds ();
-#endif
-
-#if 1
-	g_critical ("FIXME:%s:%d: child_err_pipe[0]=%d", __func__, __LINE__, child_err_pipe[0]);
-	g_critical ("FIXME:%s:%d: child_err_pipe[1]=%d", __func__, __LINE__, child_err_pipe[1]);
-#endif
-		g_critical ("FIXME:%s:%d: forcibly closing child_err_pipe[1]=%d", __func__, __LINE__, child_err_pipe[1]);
-		close (child_err_pipe[1]);
-
 		if (! cc_oci_setup_child (config)) {
 			goto child_failed;
 		}
@@ -976,9 +834,16 @@ child_failed:
 
 	g_debug ("hypervisor child pid is %u", (unsigned)pid);
 
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
-
 #if 1
+	/* Before fork this process again
+	 * we have to close unused file descriptors
+	 */
+	close (hypervisor_args_pipe[0]);
+	hypervisor_args_pipe[0] = -1;
+
+	close (child_err_pipe[1]);
+	child_err_pipe[1] = -1;
+
 	/* Launch the shim child before the state file is created.
 	 *
 	 * Required since the state file must contain the workloads pid,
@@ -990,16 +855,12 @@ child_failed:
 		goto out;
 	}
 
-	g_critical ("FIXME:%s:%d: shim_args_fd=%d", __func__, __LINE__, shim_args_fd);
-
 #else
 
 	/* FIXME: fake pid to allow pidfile to be created */
 	config->state.workload_pid = getpid ();
 
 #endif
-
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
 	/* Create state file before hooks run.
 	 *
@@ -1017,22 +878,13 @@ child_failed:
 		goto out;
 	}
 
-	g_critical ("FIXME:%s:%d: PARENT: pid_file=%s", __func__, __LINE__,
-			config->pid_file ? config->pid_file : "");
-
-	g_critical ("FIXME:%s:%d: PARENT: workload_pid=%d", __func__, __LINE__, config->state.workload_pid);
-
 	if (config->pid_file) {
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 		ret = cc_oci_create_pidfile (config->pid_file,
 				config->state.workload_pid);
-	g_critical ("FIXME:%s:%d: PARENT: ret=%d", __func__, __LINE__, ret);
 		if (! ret) {
 			goto out;
 		}
 	}
-
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
 	/* Run the pre-start hooks.
 	 *
@@ -1043,9 +895,6 @@ child_failed:
 	 * including the exit code and the stderr is returned to
 	 * the caller and the container is torn down.
 	 */
-#if 1
-	g_critical ("FIXME:%s:%d: DISABLED HOOKS", __func__, __LINE__);
-#else
 	hook_status = cc_run_hooks (config->oci.hooks.prestart,
 			config->state.state_file_path,
 			true);
@@ -1053,15 +902,6 @@ child_failed:
 	if (! hook_status) {
 		g_critical ("failed to run prestart hooks");
 	}
-#endif
-
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
-
-	close (hypervisor_args_pipe[0]);
-	hypervisor_args_pipe[0] = -1;
-
-	close (child_err_pipe[1]);
-	child_err_pipe[1] = -1;
 
 	g_debug ("building hypervisor command-line");
 
@@ -1085,8 +925,6 @@ child_failed:
 
 	hypervisor_args_len = g_utf8_strlen(hypervisor_args, -1);
 
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
-
 	/* first - write hypervisor length */
 	bytes = write (hypervisor_args_pipe[1], &hypervisor_args_len,
 		sizeof(hypervisor_args_len));
@@ -1095,8 +933,6 @@ child_failed:
 			strerror (errno));
 		goto out;
 	}
-
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
 	/* second - write hypervisor args */
 	bytes = write (hypervisor_args_pipe[1], hypervisor_args,
@@ -1109,50 +945,28 @@ child_failed:
 
 	g_debug ("checking child setup (blocking)");
 
-	g_critical ("FIXME:%s:%d: PARENT: read(child_err_pipe[0]=%d)", __func__, __LINE__, child_err_pipe[0]);
-
-	/* FIXME */
-#if 1
-	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
-	show_fds ();
-#endif
-
 	/* block reading child error state */
 	bytes = read (child_err_pipe[0],
 			buffer,
 			sizeof (buffer));
 	if (bytes > 0) {
 		g_critical ("child setup failed");
-		// FIXME
-		g_critical ("FIXME: child setup failed bytes=%d, data=%*.*s", (int)bytes, (int)bytes, (int)bytes, buffer);
 		ret = false;
 		goto out;
 	}
 
 	g_debug ("child setup successful");
 
-	g_critical ("FIXME:%s:%d: PARENT: proxy fd=%d (socket=%p)",
-			__func__, __LINE__,
-			g_socket_get_fd (config->proxy->socket),
-			config->proxy->socket);
-
 	/* Wait for the proxy to signal readiness.
 	 *
 	 * This can only happen once the agent details have been added
 	 * to the proxy object.
 	 */
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
-
 #if 1
 	if (! cc_proxy_wait_until_ready (config)) {
 		g_critical ("failed to wait for proxy %s", CC_OCI_PROXY);
 		goto out;
 	}
-
-	g_critical ("FIXME:%s:%d: PARENT: proxy fd=%d (socket=%p)",
-			__func__, __LINE__,
-			g_socket_get_fd (config->proxy->socket),
-			config->proxy->socket);
 
 	/* At this point ctl and tty sockets already exist,
 	 * is time to communicate with the proxy
@@ -1161,31 +975,16 @@ child_failed:
 		goto out;
 	}
 
-	g_critical ("FIXME:%s:%d: PARENT: proxy fd=%d (socket=%p)",
-			__func__, __LINE__,
-			g_socket_get_fd (config->proxy->socket),
-			config->proxy->socket);
-
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
-
 	proxy_fd = g_socket_get_fd (config->proxy->socket);
-
-	g_critical ("FIXME:%s:%d: PARENT: proxy_fd=%d (socket=%p)",
-			__func__, __LINE__,
-			proxy_fd,
-			config->proxy->socket);
 #endif
 
 #if 1
-	g_debug ("sending proxy fd to shim child on fd %d", shim_args_fd);
 	bytes = write (shim_args_fd, &proxy_fd, sizeof (proxy_fd));
 	if (bytes < 0) {
 		g_critical ("failed to send proxy fd to shim child: %s",
 			strerror (errno));
 		goto out;
 	}
-
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
 	close (shim_args_fd);
 	shim_args_fd = -1;
@@ -1206,14 +1005,10 @@ child_failed:
 	//
 	// - read shim_err_fd and close!
 
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
-
 	/* parent can now disconnect from the proxy (but the shim
 	 * remains connected).
 	 */
 	ret = cc_proxy_disconnect (config->proxy);
-
-	g_critical ("FIXME:%s:%d: PARENT:", __func__, __LINE__);
 
 out:
 	if (hypervisor_args_pipe[0] != -1) close (hypervisor_args_pipe[0]);
@@ -1270,8 +1065,6 @@ cc_run_hooks(GSList* hooks, const gchar* state_file_path,
 		return false;
 	}
 
-	g_critical ("FIXME:%s:%d: hook_loop=%p", __func__, __LINE__, hook_loop);
-
 	/* The state of the container is passed to the hooks over stdin,
 	 * so the hooks could get the information they need to do their
 	 * work.
@@ -1284,15 +1077,11 @@ cc_run_hooks(GSList* hooks, const gchar* state_file_path,
 		goto exit;
 	}
 
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
-
 	for (i=g_slist_nth(hooks, 0); i; i=g_slist_next(i) ) {
 		hook = (struct oci_cfg_hook*)i->data;
-		g_critical ("FIXME:%s:%d: running hook %s", __func__, __LINE__, hook->path);
 		if ((!cc_run_hook(hook, container_state, length)) && stop_on_failure) {
 			goto exit;
 		}
-		g_critical ("FIXME:%s:%d: run hook %d", __func__, __LINE__, i);
 	}
 
 	result = true;

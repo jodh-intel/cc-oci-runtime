@@ -68,11 +68,6 @@ cc_proxy_connected (struct cc_proxy *proxy)
 	return proxy->socket ? true : false;
 }
 
-/* FIXME */
-#if 1
-void show_fds(void);
-#endif
-
 /**
  * Connect to CC_OCI_PROXY.
  *
@@ -109,8 +104,6 @@ cc_proxy_connect (struct cc_proxy *proxy)
 
 	path = g_unix_socket_address_get_path (G_UNIX_SOCKET_ADDRESS (addr));
 
-	g_critical ("FIXME:%s:%d: path=%s", __func__, __LINE__, path);
-
 	proxy->socket = g_socket_new (G_SOCKET_FAMILY_UNIX,
 				      G_SOCKET_TYPE_STREAM,
 				      G_SOCKET_PROTOCOL_DEFAULT,
@@ -123,22 +116,10 @@ cc_proxy_connect (struct cc_proxy *proxy)
 		goto out_socket;
 	}
 
-	g_critical ("FIXME:%s:%d: proxy->socket=%p", __func__, __LINE__,
-			(void *)proxy->socket);
-
 	/* block on write and read */
 	g_socket_set_blocking (proxy->socket, TRUE);
 
-	/* FIXME */
-#if 1
-	g_critical ("FIXME:%s:%d: calling show_fds():", __func__, __LINE__);
-	show_fds ();
-#endif
-
 	fd = g_socket_get_fd (proxy->socket);
-
-	g_critical ("FIXME:%s:%d: proxy socket fd=%d", __func__, __LINE__,
-			fd);
 
 	ret = cc_oci_fd_set_cloexec (fd);
 	if (! ret) {
@@ -417,9 +398,6 @@ cc_proxy_run_cmd(struct cc_proxy *proxy,
 	proxy_data.msg_to_send = msg_to_send;
 
 	fd = g_socket_get_fd (proxy->socket);
-
-	// FIXME
-	g_critical ("FIXME:%s:%d: proxy fd=%d", __func__, __LINE__, fd);
 
 	channel = g_io_channel_unix_new(fd);
 	if (! channel) {
