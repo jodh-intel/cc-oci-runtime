@@ -445,7 +445,6 @@ cc_run_hook(struct oci_cfg_hook* hook, const gchar* state,
 	 * to finish.
 	 */
 
-	// BUG: FIXME: this is stopping all output!
 	g_main_loop_run(hook_loop);
 
 	/* check hook exit code */
@@ -575,13 +574,21 @@ cc_shim_launch (struct cc_oci_config *config,
 		bytes = read (shim_args_pipe[0],
 				&proxy_socket_fd,
 				sizeof (proxy_socket_fd));
-		if (bytes < 0) {
+		close (shim_args_pipe[0]);
+		shim_args_pipe[0] = -1;
+
+		if (bytes <= 0) {
 			g_critical ("failed to read proxy socket fd");
 			goto child_failed;
 		}
 
 		g_debug ("proxy socket fd from parent=%d",
 				proxy_socket_fd);
+
+		if (proxy_socket_fd < 0) {
+			g_critical ("parent provided invalid proxy fd");
+			goto child_failed;
+		}
 
 		/* +1 for for NULL terminator */
 		args = g_new0 (gchar *, 5+1);
@@ -595,18 +602,6 @@ cc_shim_launch (struct cc_oci_config *config,
 		for (gchar** p = args; p && *p; p++) {
 			g_debug ("arg: '%s'", *p);
 		}
-
-		/* FIXME: 
-		 *
-		 * Make cc_oci_close_fds() accept a GArray of int fds to
-		 * keep open and close all others.
-		 */
-
-#if 0
-		close (STDIN_FILENO);
-		close (STDOUT_FILENO);
-		close (STDERR_FILENO);
-#endif
 
 		if (! cc_oci_setup_child (config)) {
 			goto child_failed;
@@ -976,6 +971,10 @@ child_failed:
 	}
 
 	proxy_fd = g_socket_get_fd (config->proxy->socket);
+	if (proxy_fd < 0) {
+		g_critical ("invalid proxy fd: %d", proxy_fd);
+		goto out;
+	}
 #endif
 
 #if 1
@@ -990,6 +989,17 @@ child_failed:
 	shim_args_fd = -1;
 #endif
 
+	g_debug ("checking shim setup (blocking)");
+
+	bytes = read (shim_err_fd,
+			buffer,
+			sizeof (buffer));
+	if (bytes > 0) {
+		g_critical ("shim setup failed");
+		ret = false;
+		goto out;
+	}
+
 	/* Recreate the state file now that all information is
 	 * available.
 	 */
@@ -1000,10 +1010,6 @@ child_failed:
 		g_critical ("failed to recreate state file");
 		goto out;
 	}
-
-	// FIXME:
-	//
-	// - read shim_err_fd and close!
 
 	/* parent can now disconnect from the proxy (but the shim
 	 * remains connected).
