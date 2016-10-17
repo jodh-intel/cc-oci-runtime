@@ -206,6 +206,7 @@ cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
 	GIOStatus status;
 	gchar buffer[LINE_MAX];
 	gsize bytes_read;
+	GError *error = NULL;
 
 	if (condition == G_IO_HUP) {
 		g_io_channel_unref(source);
@@ -214,8 +215,8 @@ cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
 
 	/* read and print all chars */
 	while(true) {
-		status = g_io_channel_read_chars(source, buffer, sizeof(buffer),
-				&bytes_read, NULL);
+		status = g_io_channel_read_chars (source, buffer, sizeof(buffer),
+				&bytes_read, &error);
 		if (status == G_IO_STATUS_EOF) {
 			goto out;
 		}
@@ -224,6 +225,12 @@ cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
 		}
 		g_string_append_len(proxy_data->msg_received,
 				buffer, (gssize)bytes_read);
+	}
+
+	if (status == G_IO_STATUS_ERROR) {
+		g_debug ("proxy read failed: %s", error->message);
+		g_error_free (error);
+		goto out;
 	}
 
 	g_debug("message read from proxy socket: %s",
@@ -251,6 +258,8 @@ cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
 {
 	gsize bytes_written = 0;
 	gsize len = 0;
+	GIOStatus status;
+	GError *error = NULL;
 
 	if (condition == G_IO_HUP) {
 		g_io_channel_unref(source);
@@ -262,11 +271,28 @@ cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
 	g_debug("writing message to proxy socket: %s",
 			proxy_data->msg_to_send);
 
-	g_io_channel_write_chars(source,
-			proxy_data->msg_to_send,
-			(gssize)len, &bytes_written, NULL);
+	do {
+		status = g_io_channel_write_chars(source,
+				proxy_data->msg_to_send,
+				(gssize)len, &bytes_written, &error);
+	} while (status == G_IO_STATUS_AGAIN);
 
-	g_io_channel_flush(source, NULL);
+	if (status == G_IO_STATUS_ERROR) {
+		g_debug ("proxy write failed: %s", error->message);
+		g_error_free (error);
+		goto out;
+	}
+
+	do {
+		status = g_io_channel_flush(source, &error);
+	} while (status == G_IO_STATUS_AGAIN);
+
+	if (status == G_IO_STATUS_ERROR) {
+		g_debug ("proxy flush failed: %s",
+		    error->message);
+		g_error_free (error);
+		goto out;
+	}
 
 	/* Now we've sent the initial negotiation message,
 	 * register a handler to wait for a reply.
