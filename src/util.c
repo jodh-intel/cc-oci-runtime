@@ -593,9 +593,7 @@ cc_oci_set_std_fds (void)
 	for (fd = 0;
 	     fd < (int)(sizeof (fds)/sizeof (fds[0]));
 	     fd++) {
-		// FIXME:
-		//if (! cc_oci_fd_valid (fd)) {
-		if (fd == 0 || ! cc_oci_fd_valid (fd)) {
+		if (! cc_oci_fd_valid (fd)) {
 			int ret;
 
 			if (devnull == -1) {
