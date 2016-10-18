@@ -529,25 +529,15 @@ cc_shim_launch (struct cc_oci_config *config,
 		return false;
 	}
 
-	if (pipe (child_err_pipe) < 0) {
+	if (pipe2 (child_err_pipe, O_CLOEXEC) < 0) {
 		g_critical ("failed to create shim err pipe: %s",
 				strerror (errno));
 		goto out;
 	}
 
-	if (pipe (shim_args_pipe) < 0) {
+	if (pipe2 (shim_args_pipe, O_CLOEXEC) < 0) {
 		g_critical ("failed to create shim args pipe: %s",
 				strerror (errno));
-		goto out;
-	}
-
-	if (! cc_oci_fd_set_cloexec (child_err_pipe[1])) {
-		g_critical ("failed to set close-exec bit on shim child error fd");
-		goto out;
-	}
-
-	if (! cc_oci_fd_set_cloexec (shim_args_pipe[0])) {
-		g_critical ("failed to set close-exec bit on shim child args fd");
 		goto out;
 	}
 
@@ -711,25 +701,15 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	 *   writes data to the pipe, setup failed.
 	 */
 
-	if (pipe (child_err_pipe) < 0) {
+	if (pipe2 (child_err_pipe, O_CLOEXEC) < 0) {
 		g_critical ("failed to create child error pipe: %s",
 				strerror (errno));
 		goto out;
 	}
 
-	if (pipe (hypervisor_args_pipe) < 0) {
+	if (pipe2 (hypervisor_args_pipe, O_CLOEXEC) < 0) {
 		g_critical ("failed to create hypervisor args pipe: %s",
 				strerror (errno));
-		goto out;
-	}
-
-	if (! cc_oci_fd_set_cloexec (child_err_pipe[1])) {
-		g_critical ("failed to set close-exec bit on fd");
-		goto out;
-	}
-
-	if (! cc_oci_fd_set_cloexec (hypervisor_args_pipe[0])) {
-		g_critical ("failed to set close-exec bit on fd");
 		goto out;
 	}
 
