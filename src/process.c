@@ -565,6 +565,9 @@ cc_shim_launch (struct cc_oci_config *config,
 
 		/* child */
 
+		/* inform the child who they are */
+		config->state.workload_pid = getpid ();
+
 		close (child_err_pipe[0]);
 		close (shim_args_pipe[1]);
 
@@ -739,6 +742,9 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 
 	if (! pid) {
 		/* child */
+
+		/* inform the child who they are */
+		config->vm->pid = getpid ();
 
 		close (hypervisor_args_pipe[1]);
 		close (child_err_pipe[0]);
