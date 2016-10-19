@@ -904,9 +904,6 @@ cc_oci_create (struct cc_oci_config *config)
 		return true;
 	}
 
-	/* start VM is a stopped state (containerd requires a
-	 * valid pid in the pidfile after a successful "create").
-	 */
 	if (! cc_oci_vm_launch (config)) {
 		g_critical ("failed to launch VM");
 		goto out;
