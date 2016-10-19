@@ -859,14 +859,6 @@ child_failed:
 		goto out;
 	}
 
-	if (config->pid_file) {
-		ret = cc_oci_create_pidfile (config->pid_file,
-				config->state.workload_pid);
-		if (! ret) {
-			goto out;
-		}
-	}
-
 	/* Run the pre-start hooks.
 	 *
 	 * Note that one of these hooks will configure the networking
@@ -943,7 +935,6 @@ child_failed:
 	 * This can only happen once the agent details have been added
 	 * to the proxy object.
 	 */
-#if 1
 	if (! cc_proxy_wait_until_ready (config)) {
 		g_critical ("failed to wait for proxy %s", CC_OCI_PROXY);
 		goto out;
@@ -961,9 +952,7 @@ child_failed:
 		g_critical ("invalid proxy fd: %d", proxy_fd);
 		goto out;
 	}
-#endif
 
-#if 1
 	bytes = write (shim_args_fd, &proxy_fd, sizeof (proxy_fd));
 	if (bytes < 0) {
 		g_critical ("failed to send proxy fd to shim child: %s",
@@ -973,7 +962,6 @@ child_failed:
 
 	close (shim_args_fd);
 	shim_args_fd = -1;
-#endif
 
 	g_debug ("checking shim setup (blocking)");
 
@@ -1002,15 +990,26 @@ child_failed:
 	 */
 	ret = cc_proxy_disconnect (config->proxy);
 
+	/* Finally, create the pid file.
+	 *
+	 * This MUST be done after all setup since containerd
+	 * considers "create" finished when this file has been created
+	 * (and it will then goes on to call "start").
+	 */
+	if (config->pid_file) {
+		ret = cc_oci_create_pidfile (config->pid_file,
+				config->state.workload_pid);
+		if (! ret) {
+			goto out;
+		}
+	}
 out:
 	if (hypervisor_args_pipe[0] != -1) close (hypervisor_args_pipe[0]);
 	if (hypervisor_args_pipe[1] != -1) close (hypervisor_args_pipe[1]);
 	if (child_err_pipe[0] != -1) close (child_err_pipe[0]);
 	if (child_err_pipe[1] != -1) close (child_err_pipe[1]);
-#if 1
 	if (shim_err_fd != -1) close (shim_err_fd);
 	if (shim_args_fd != -1) close (shim_args_fd);
-#endif
 
 	if (setup_networking) {
 		netlink_close (hndl);
