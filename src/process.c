@@ -176,7 +176,6 @@ cc_oci_setup_child (struct cc_oci_config *config)
 	}
 
 	cc_oci_setup_hypervisor_logs(config);
-	cc_oci_setup_shim_logs(config);
 
 	return true;
 }
@@ -660,10 +659,8 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	GPtrArray         *additional_args = NULL;
 	gint               hypervisor_args_len;
 	g_autofree gchar  *hypervisor_args = NULL;
-#if 1
 	int                shim_err_fd = -1;
 	int                shim_args_fd = -1;
-#endif
 	int                proxy_fd = -1;
 
 	setup_networking = cc_oci_enable_networking ();
@@ -815,7 +812,6 @@ child_failed:
 
 	g_debug ("hypervisor child pid is %u", (unsigned)pid);
 
-#if 1
 	/* Before fork this process again
 	 * we have to close unused file descriptors
 	 */
@@ -835,13 +831,6 @@ child_failed:
 	if (! cc_shim_launch (config, &shim_err_fd, &shim_args_fd)) {
 		goto out;
 	}
-
-#else
-
-	/* FIXME: fake pid to allow pidfile to be created */
-	config->state.workload_pid = getpid ();
-
-#endif
 
 	/* Create state file before hooks run.
 	 *
