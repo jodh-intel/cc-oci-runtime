@@ -248,12 +248,15 @@ START_TEST(test_cc_oci_state_file_create) {
 	m->ignore_mount = true;
 	config->oci.mounts = g_slist_append(config->oci.mounts, m);
 
-	/* config->proxy not set */
-	ck_assert (! cc_oci_state_file_create (config, timestamp));
+	/* config->proxy is allocated, but members are not set
+	 * (this is legal)
+	 */
+	ck_assert (config->proxy);
+	ck_assert (! config->proxy->agent_ctl_socket);
+	ck_assert (! config->proxy->agent_tty_socket);
+	ck_assert (cc_oci_state_file_create (config, timestamp));
 
-	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
 	assert (config->proxy);
-
 	config->proxy->agent_ctl_socket = g_strdup ("ctl-socket");
 	config->proxy->agent_tty_socket = g_strdup ("tty-socket");
 

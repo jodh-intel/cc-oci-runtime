@@ -199,6 +199,7 @@ test_helper_create_state_file (const char *name,
 	assert (name);
 	assert (root_dir);
 	assert (config);
+	assert (config->proxy);
 
 	timestamp = g_strdup_printf ("timestamp for %s", name);
 	assert (timestamp);
@@ -225,15 +226,20 @@ test_helper_create_state_file (const char *name,
 		  sizeof (config->state.procsock_path));
 
 	if (! cc_oci_runtime_dir_setup (config)) {
-		fprintf (stderr, "ERROR: failed to setup runtime dir "
-				"for vm %s", name);
+		fprintf (stderr,
+				"ERROR:%s:%d: failed to setup "
+				"runtime dir for vm %s\n",
+				__func__, __LINE__, name);
 		return false;
 	}
 
 	/* config->vm not set */
 	if (cc_oci_state_file_create (config, timestamp)) {
-		fprintf (stderr, "ERROR: cc_oci_state_file_create "
-				"worked unexpectedly for vm %s (no config->vm)\n", name);
+		fprintf (stderr,
+				"ERROR:%s:%d: cc_oci_state_file_create "
+				"worked unexpectedly for vm %s "
+				"(no config->vm)\n",
+				__func__, __LINE__, name);
 		return false;
 	}
 
@@ -255,19 +261,6 @@ test_helper_create_state_file (const char *name,
 	/* set pid to ourselves so we know it's running */
 	config->vm->pid = getpid ();
 
-	/* config->proxy->* not set */
-	if (cc_oci_state_file_create (config, timestamp)) {
-		fprintf (stderr, "ERROR: cc_oci_state_file_create "
-				"worked unexpectedly for vm %s (no config->proxy)\n", name);
-		return false;
-	}
-	config->vm->kernel_params = g_strdup_printf ("kernel params for %s", name);
-
-	assert (! config->proxy);
-
-	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
-	assert (config->proxy);
-
 	proxy = config->proxy;
 
 	proxy->socket = g_socket_new (G_SOCKET_FAMILY_UNIX,
@@ -281,8 +274,9 @@ test_helper_create_state_file (const char *name,
 
 	/* config->vm and config->proxy now set */
 	if (! cc_oci_state_file_create (config, timestamp)) {
-		fprintf (stderr, "ERROR: cc_oci_state_file_create "
-				"failed unexpectedly");
+		fprintf (stderr, "ERROR:%s:%d: cc_oci_state_file_create "
+				"failed unexpectedly\n",
+				__func__, __LINE__);
 		return false;
 
 	}

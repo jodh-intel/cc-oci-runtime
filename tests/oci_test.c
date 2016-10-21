@@ -719,14 +719,15 @@ START_TEST(test_cc_oci_get_config_and_state) {
 
 	config = cc_oci_config_create ();
 	ck_assert (config);
+	ck_assert (config->proxy);
 
 	vm1_config = cc_oci_config_create ();
 	ck_assert (vm1_config);
+	ck_assert (vm1_config->proxy);
 
 	tmpdir = g_dir_make_tmp (NULL, NULL);
 	ck_assert (tmpdir);
 
-#if 0
 	ck_assert (! cc_oci_get_config_and_state (NULL, NULL, NULL));
 	ck_assert (! cc_oci_get_config_and_state (NULL, config, &state));
 	ck_assert (! cc_oci_get_config_and_state (NULL, NULL, &state));
@@ -736,10 +737,8 @@ START_TEST(test_cc_oci_get_config_and_state) {
 
 	/* no container id */
 	ck_assert (! cc_oci_get_config_and_state (&config_file, config, &state));
-#endif
 
 	/* create a VM state file */
-	// FIXME: failing
 	ck_assert (test_helper_create_state_file ("vm1", tmpdir, vm1_config));
 	ck_assert (! vm1_config->oci.mounts);
 
@@ -785,8 +784,11 @@ START_TEST(test_cc_oci_get_config_and_state) {
 	ck_assert (! g_strcmp0 (state->vm->image_path, vm1_config->vm->image_path));
 	ck_assert (! g_strcmp0 (state->vm->kernel_path, vm1_config->vm->kernel_path));
 	ck_assert (! g_strcmp0 (state->vm->workload_path, vm1_config->vm->workload_path));
+
+	/* unspecified kernel_params are encoded as "" */
+	ck_assert (! vm1_config->vm->kernel_params);
 	ck_assert (state->vm->kernel_params);
-	ck_assert (! g_strcmp0 (state->vm->kernel_params, vm1_config->vm->kernel_params));
+	ck_assert (! g_strcmp0 (state->vm->kernel_params, ""));
 
 	/* clean up */
 	ck_assert (! g_remove (vm1_config->state.state_file_path));
@@ -1037,12 +1039,15 @@ START_TEST(test_cc_oci_kill) {
 
 	config = cc_oci_config_create ();
 	ck_assert (config);
+	ck_assert (config->proxy);
 
 	config_tmp = cc_oci_config_create ();
 	ck_assert (config_tmp);
+	ck_assert (config_tmp->proxy);
 
 	config_new = cc_oci_config_create ();
 	ck_assert (config_new);
+	ck_assert (config_new->proxy);
 
 	ck_assert (! cc_oci_kill (NULL, NULL, 0));
 
@@ -1074,7 +1079,7 @@ START_TEST(test_cc_oci_kill) {
 
 	config->optarg_container_id = config_tmp->optarg_container_id;
 
-	ck_assert (! config->proxy);
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_get_config_and_state (&config_file,
 				config, &state));

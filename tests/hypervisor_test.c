@@ -260,6 +260,7 @@ START_TEST(test_cc_oci_expand_cmdline) {
 
 	config = cc_oci_config_create ();
 	ck_assert (config);
+	ck_assert (config->proxy);
 
 	/* no config->vm */
 	ck_assert (! cc_oci_expand_cmdline (config, args));
@@ -315,13 +316,12 @@ START_TEST(test_cc_oci_expand_cmdline) {
 
 	ck_assert (! config->console);
 	ck_assert (! config->bundle_path);
-	ck_assert (! config->proxy);
 
 	ck_assert (! cc_oci_expand_cmdline (config, args));
 
 	ck_assert (! config->console);
 	ck_assert (! config->bundle_path);
-	ck_assert (! config->proxy);
+	ck_assert (config->proxy);
 
 	config->bundle_path = g_strdup (tmpdir);
 	ck_assert (cc_oci_expand_cmdline (config, args));
@@ -353,7 +353,8 @@ START_TEST(test_cc_oci_expand_cmdline) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	/* ensure no expansion took place */
 	ck_assert (! g_strcmp0 (args[0], ""));
@@ -393,7 +394,8 @@ START_TEST(test_cc_oci_expand_cmdline) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_expand_cmdline (config, args));
 	ck_assert (check_full_expansion (config,
@@ -411,7 +413,8 @@ START_TEST(test_cc_oci_expand_cmdline) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_expand_cmdline (config, args));
 	ck_assert (! g_strcmp0 (args[0], shell));
@@ -423,7 +426,8 @@ START_TEST(test_cc_oci_expand_cmdline) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_expand_cmdline (config, args));
 	ck_assert (! g_strcmp0 (args[0], shell));
@@ -567,7 +571,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	/* recreate the args file */
 	ret = g_file_set_contents (args_file, "hello# comment\n", -1, NULL);
@@ -585,7 +590,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, NULL));
 
@@ -599,7 +605,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, NULL));
 
@@ -613,7 +620,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, NULL));
 
@@ -627,7 +635,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, NULL));
 
@@ -640,7 +649,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, NULL));
 
@@ -653,7 +663,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, NULL));
 
@@ -671,7 +682,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
         ck_assert (cc_oci_vm_args_get (config, &args, extra_args));
 
@@ -695,7 +707,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, extra_args));
 
@@ -725,7 +738,8 @@ START_TEST(test_cc_oci_vm_args_get) {
 
 	/* clean up ready for another call */
 	cc_proxy_free (config->proxy);
-	config->proxy = NULL;
+	config->proxy = g_malloc0 (sizeof (struct cc_proxy));
+	ck_assert (config->proxy);
 
 	ck_assert (cc_oci_vm_args_get (config, &args, NULL));
 	ck_assert (check_full_expansion (config, (const gchar **)args,
