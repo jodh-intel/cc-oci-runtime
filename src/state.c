@@ -675,7 +675,14 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 		return false;
 	}
 
-	if (! (config->proxy)) {
+	/* Note that although the proxy object must be allocated, it
+	 * may not have had its members set.
+	 *
+	 * This has to be allowed given the way cc_oci_vm_launch()
+	 * works (it creates the state file with "blank" proxy values,
+	 * then later recreates it with complete information).
+	 */
+	if (! config->proxy) {
 		return false;
 	}
 
@@ -766,10 +773,12 @@ cc_oci_state_file_create (struct cc_oci_config *config,
 	proxy = json_object_new ();
 
 	json_object_set_string_member (proxy, "ctlSocket",
-			config->proxy->agent_ctl_socket);
+			config->proxy->agent_ctl_socket ?
+			config->proxy->agent_ctl_socket : "");
 
 	json_object_set_string_member (proxy, "ioSocket",
-			config->proxy->agent_tty_socket);
+			config->proxy->agent_tty_socket ?
+			config->proxy->agent_tty_socket : "");
 
 	json_object_set_object_member (obj, "proxy", proxy);
 
