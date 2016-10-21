@@ -465,6 +465,10 @@ exit:
 		g_error_free(error);
 	}
 
+	/* Note: this call does not close the fd */
+	if (out_ch) g_io_channel_unref (out_ch);
+	if (err_ch) g_io_channel_unref (err_ch);
+
 	if (std_out != -1) close (std_out);
 	if (std_err != -1) close (std_err);
 
