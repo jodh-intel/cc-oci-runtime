@@ -650,8 +650,7 @@ cc_oci_vm_launch (struct cc_oci_config *config)
 	gboolean           ret = false;
 	GPid               pid;
 	ssize_t            bytes;
-	//char               buffer[2] = { '\0' };
-	char               buffer[1024] = { '\0' };
+	char               buffer[2] = { '\0' };
 	int                hypervisor_args_pipe[2] = {-1, -1};
 	int                child_err_pipe[2] = {-1, -1};
 	gchar            **args = NULL;
