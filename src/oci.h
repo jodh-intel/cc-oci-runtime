@@ -75,6 +75,7 @@
 
 /** Directory below which container-specific directory will be created.
  */
+// FIXME:
 #if 0
 #define CC_OCI_RUNTIME_DIR_PREFIX	LOCALSTATEDIR \
 					"/run/cc-oci-runtime"
@@ -107,9 +108,6 @@
 
 /** Mode for all created directories. */
 #define CC_OCI_DIR_MODE                0750
-
-/** Size of buffer to use to receive network data */
-#define CC_OCI_NET_BUF_SIZE		2048
 
 /** Platform we expect \ref CC_OCI_CONFIG_FILE to specify. */
 #define CC_OCI_EXPECTED_PLATFORM	"linux"

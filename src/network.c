@@ -42,6 +42,9 @@
 #include "util.h"
 #include "network.h"
 
+/** Size of buffer to use to receive network data */
+#define CC_OCI_NET_BUF_SIZE 2048
+
 /** String that separates messages returned from the hypervisor */
 #define CC_OCI_MSG_SEPARATOR "\r\n"
 
