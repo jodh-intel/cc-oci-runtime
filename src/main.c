@@ -417,24 +417,11 @@ cleanup (struct cc_log_options *options)
 	g_free_if_set (root_dir);
 }
 
-/**
- * Deal with initial setup.
- */
-static void
-setup (void)
-{
-	if (! cc_oci_set_std_fds ()) {
-		exit (EXIT_FAILURE);
-	}
-}
-
 /** Entry point. */
 int
 main (int argc, char **argv)
 {
 	gboolean ret;
-
-	setup ();
 
 	ret = handle_arguments (argc, argv);
 
