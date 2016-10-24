@@ -60,9 +60,6 @@
 #define HYPERVISOR_STDOUT_FILE "hypervisor.stdout"
 #define HYPERVISOR_STDERR_FILE "hypervisor.stderr"
 
-#define SHIM_STDOUT_FILE "shim.stdout"
-#define SHIM_STDERR_FILE "shim.stderr"
-
 static gchar* hypervisor_log_dir;
 
 /*!
