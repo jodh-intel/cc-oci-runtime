@@ -1318,6 +1318,11 @@ cc_oci_stop (struct cc_oci_config *config,
 				state->id, state->pid);
 	}
 
+	/* Allow the proxy to clean up resources */
+	if (! cc_proxy_cmd_bye (config->proxy)) {
+		return false;
+	}
+
 	/* The post-stop hooks are called after the container process is
 	 * stopped. Cleanup or debugging could be performed in such a
 	 * hook. If a hook returns a non-zero exit code, then an error
