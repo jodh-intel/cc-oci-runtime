@@ -566,12 +566,27 @@ cc_shim_launch (struct cc_oci_config *config,
 		}
 
 		/* +1 for for NULL terminator */
+
+		/* FIXME: uncomment once we have run "AllocateIO" */
+#if 1
 		args = g_new0 (gchar *, 5+1);
 		args[0] = g_strdup (CC_OCI_SHIM);
 		args[1] = g_strdup ("-c");
 		args[2] = g_strdup (config->optarg_container_id);
 		args[3] = g_strdup ("-p");
 		args[4] = g_strdup_printf ("%d", proxy_socket_fd);
+#else
+		args = g_new0 (gchar *, 9+1);
+		args[0] = g_strdup (CC_OCI_SHIM);
+		args[1] = g_strdup ("-c");
+		args[2] = g_strdup (config->optarg_container_id);
+		args[3] = g_strdup ("-p");
+		args[4] = g_strdup_printf ("%d", proxy_socket_fd);
+		args[5] = g_strdup ("-o");
+		args[6] = g_strdup_printf ("%d", proxy_io_fd);
+		args[7] = g_strdup ("-s");
+		args[8] = g_strdup_printf ("%d", proxy_io_seq_no);
+#endif
 
 		g_debug ("running command:");
 		for (gchar** p = args; p && *p; p++) {
@@ -917,6 +932,10 @@ child_failed:
 	if (! cc_proxy_hyper_pod_create (config)) {
 		goto out;
 	}
+
+	/* FIXME: TODO: call cc_proxy_cmd_allocate_io () to get
+	 * sequence numbers and pass to cc-shim via shim_args_fd.
+	 */
 
 	proxy_fd = g_socket_get_fd (config->proxy->socket);
 	if (proxy_fd < 0) {
