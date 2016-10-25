@@ -528,7 +528,7 @@ out:
  * \return \c true on success, else \c false.
  */
 static gboolean
-cc_proxy_hello (struct cc_proxy *proxy, const char *container_id)
+cc_proxy_cmd_hello (struct cc_proxy *proxy, const char *container_id)
 {
 	JsonObject        *obj = NULL;
 	JsonObject        *data = NULL;
@@ -596,6 +596,99 @@ out:
 	return ret;
 }
 
+/**
+ * Send the final message to the proxy.
+ *
+ * \param proxy \ref cc_proxy.
+ *
+ * \return \c true on success, else \c false.
+ */
+static gboolean
+cc_proxy_cmd_bye (struct cc_proxy *proxy)
+{
+	JsonObject        *obj = NULL;
+	JsonObject        *data = NULL;
+	JsonNode          *root = NULL;
+	JsonGenerator     *generator = NULL;
+	gchar             *msg_to_send = NULL;
+	GString           *msg_received = NULL;
+	gboolean           ret = false;
+
+	/* The name of the proxy command used to terminate
+	 * communications.
+	 */
+	const gchar       *proxy_cmd = "bye";
+
+	if (! proxy) {
+		return false;
+	}
+
+	if (! cc_proxy_connected (proxy)) {
+		g_critical ("not connected to proxy");
+		return ret;
+	}
+
+	obj = json_object_new ();
+	data = json_object_new ();
+
+	json_object_set_string_member (obj, "id", proxy_cmd);
+
+	root = json_node_new (JSON_NODE_OBJECT);
+	generator = json_generator_new ();
+	json_node_take_object (root, obj);
+
+	json_generator_set_root (generator, root);
+	g_object_set (generator, "pretty", FALSE, NULL);
+
+	msg_to_send = json_generator_to_data (generator, NULL);
+
+	msg_received = g_string_new ("");
+
+	if (! cc_proxy_run_cmd (proxy, msg_to_send, msg_received)) {
+		g_critical ("failed to run proxy command %s: %s",
+				proxy_cmd,
+				msg_received->str);
+		goto out;
+	}
+
+	ret = true;
+
+	g_debug("msg received: %s", msg_received->str);
+
+out:
+	if (msg_received) {
+		g_string_free(msg_received, true);
+	}
+	if (obj) {
+		json_object_unref (obj);
+	}
+
+	return ret;
+}
+
+/**
+ * Ask the proxy to allocate I/O stream "sequence numbers".
+ *
+ * \param proxy \ref cc_proxy.
+ *
+ * \return \c true on success, else \c false.
+ */
+static gboolean
+cc_proxy_cmd_allocate_io (struct cc_proxy *proxy)
+{
+	if (! proxy) {
+		return false;
+	}
+
+	/* FIXME: TODO:
+	 *
+	 * - call "allocateIO" proxy command.
+	 * - get both stdout + stderr sequence numbers.
+	 * - store in cc_proxy object.
+	 */
+
+	return true;
+}
 
 /**
  * Connect to \ref CC_OCI_PROXY and wait until it is ready.
@@ -642,7 +735,7 @@ cc_proxy_wait_until_ready (struct cc_oci_config *config)
 		}
 	}
 
-	if (! cc_proxy_hello (config->proxy, config->optarg_container_id)) {
+	if (! cc_proxy_cmd_hello (config->proxy, config->optarg_container_id)) {
 		return false;
 	}
 out:
