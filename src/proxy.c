@@ -20,6 +20,7 @@
 
 #include <string.h>
 #include <sys/stat.h>
+#include <arpa/inet.h>
 #include <gio/gunixsocketaddress.h>
 #include "oci.h"
 #include "json.h"
@@ -33,6 +34,18 @@ struct watcher_proxy_data
 	GIOChannel  *channel;
 	gchar       *msg_to_send;
 	GString     *msg_received;
+};
+
+/** Format of a proxy message */
+struct proxy_msg {
+	/** Number of bytes in payload. */
+	guint32  length;
+
+	/** Not used. */
+	guint32  reserved;
+
+	/** Message payload (JSON). */
+	gchar   *data;
 };
 
 /**
@@ -200,32 +213,52 @@ out:
  * \return \c false
  */
 static gboolean
-cc_proxy_read_msg(GIOChannel *source, GIOCondition condition,
+cc_proxy_msg_read (GIOChannel *source, GIOCondition condition,
 	struct watcher_proxy_data *proxy_data)
 {
 	GIOStatus status;
-	gchar buffer[LINE_MAX];
-	gsize bytes_read;
+	g_autofree gchar *buffer = NULL;
+	gsize bytes_read = 0;
+	gsize len = 0;
 	GError *error = NULL;
+	struct proxy_msg msg = { 0 };
 
 	if (condition == G_IO_HUP) {
 		g_io_channel_unref(source);
 		goto out;
 	}
 
+	/* read length of message data that follows */
+	do {
+		status = g_io_channel_read_chars (source,
+				(gchar *)&msg,
+				sizeof (msg.length) +
+				sizeof (msg.reserved),
+				&bytes_read,
+				&error);
+	} while (status == G_IO_STATUS_AGAIN);
+
+	if (status != G_IO_STATUS_NORMAL) {
+		goto out;
+	}
+
+	len = (gsize)ntohl (msg.length);
+
+	g_debug ("proxy sending %lu bytes", (unsigned long int)len);
+
+	buffer = g_malloc0 (len);
+
 	/* read and print all chars */
-	while(true) {
-		status = g_io_channel_read_chars (source, buffer, sizeof(buffer),
-				&bytes_read, &error);
-		if (status == G_IO_STATUS_EOF) {
-			goto out;
-		}
-		if (status != G_IO_STATUS_NORMAL) {
-			break;
-		}
+	do {
+		status = g_io_channel_read_chars (source,
+				buffer,
+				len+1, /* +1 for terminator */
+				&bytes_read,
+				&error);
+
 		g_string_append_len(proxy_data->msg_received,
 				buffer, (gssize)bytes_read);
-	}
+	} while (status == G_IO_STATUS_AGAIN);
 
 	if (status == G_IO_STATUS_ERROR) {
 		g_debug ("proxy read failed: %s", error->message);
@@ -253,13 +286,14 @@ out:
  * \return \c false
  */
 static gboolean
-cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
+cc_proxy_msg_write (GIOChannel *source, GIOCondition condition,
 	struct watcher_proxy_data *proxy_data)
 {
 	gsize bytes_written = 0;
 	gsize len = 0;
 	GIOStatus status;
 	GError *error = NULL;
+	struct proxy_msg msg = { 0 };
 
 	if (condition == G_IO_HUP) {
 		g_io_channel_unref(source);
@@ -268,13 +302,37 @@ cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
 
 	len = g_utf8_strlen(proxy_data->msg_to_send, -1);
 
-	g_debug("writing message to proxy socket: %s",
+	msg.length = htonl ((guint32)len);
+	msg.data = proxy_data->msg_to_send;
+
+	g_debug ("sending message (length %lu) to proxy socket",
+			(unsigned long int)len);
+
+	do {
+		status = g_io_channel_write_chars(source,
+				(const gchar *)&msg,
+				(gssize)sizeof (msg.length) +
+				sizeof (msg.reserved),
+				&bytes_written,
+				&error);
+	} while (status == G_IO_STATUS_AGAIN);
+
+	if (status == G_IO_STATUS_ERROR) {
+		g_debug ("proxy message length write failed: %s",
+				error->message);
+		g_error_free (error);
+		goto out;
+	}
+
+	g_debug("writing message data to proxy socket: %s",
 			proxy_data->msg_to_send);
 
 	do {
 		status = g_io_channel_write_chars(source,
 				proxy_data->msg_to_send,
-				(gssize)len, &bytes_written, &error);
+				(gssize)len,
+				&bytes_written,
+				&error);
 	} while (status == G_IO_STATUS_AGAIN);
 
 	if (status == G_IO_STATUS_ERROR) {
@@ -284,7 +342,7 @@ cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
 	}
 
 	do {
-		status = g_io_channel_flush(source, &error);
+		status = g_io_channel_flush (source, &error);
 	} while (status == G_IO_STATUS_AGAIN);
 
 	if (status == G_IO_STATUS_ERROR) {
@@ -298,13 +356,12 @@ cc_proxy_write_msg(GIOChannel *source, GIOCondition condition,
 	 * register a handler to wait for a reply.
 	 */
 	g_io_add_watch(source, G_IO_IN | G_IO_HUP,
-	    (GIOFunc)cc_proxy_read_msg, proxy_data);
+	    (GIOFunc)cc_proxy_msg_read, proxy_data);
 
 out:
 	/* unregister this watcher */
 	return false;
 }
-
 /**
  * Callback used to monitor CTL socket creation
  *
@@ -437,7 +494,7 @@ cc_proxy_run_cmd(struct cc_proxy *proxy,
 
 	/* add a watcher for proxy's socket stdin */
 	g_io_add_watch(channel, G_IO_OUT | G_IO_HUP,
-	    (GIOFunc)cc_proxy_write_msg, &proxy_data);
+	    (GIOFunc)cc_proxy_msg_write, &proxy_data);
 
 	g_debug ("communicating with proxy");
 
