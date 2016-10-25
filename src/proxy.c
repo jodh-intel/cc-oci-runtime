@@ -210,7 +210,7 @@ out:
  * \param condition GIOCondition.
  * \param proxy_data struct watcher_proxy_data.
  *
- * \return \c false
+ * \return \c true on success, else \c false.
  */
 static gboolean
 cc_proxy_msg_read (GIOChannel *source, GIOCondition condition,
@@ -283,7 +283,7 @@ out:
  * \param condition GIOCondition.
  * \param proxy_data struct watcher_proxy_data.
  *
- * \return \c false
+ * \return \c true on success, else \c false.
  */
 static gboolean
 cc_proxy_msg_write (GIOChannel *source, GIOCondition condition,
@@ -391,9 +391,9 @@ cc_proxy_ctl_socket_created_callback(GFileMonitor *monitor, GFile *file,
  *
  *     {"success": [true|false], "error": "an explanation" }
  *
- * \param data \ref watcher_proxy_data.
- * \param proxy_success \c true if the last proxy command was
- * successful, else \c false.
+ * \param response \c GString containing raw proxy response message.
+ * \param[out] proxy_success \c true if the last proxy command was
+ *   successful, else \c false.
  *
  * \return \c true if the proxy response could be checked,
  * else \c false.
@@ -666,7 +666,7 @@ out:
  *
  * \param config \ref cc_oci_config.
  * \param cmd Name of hyper command to run.
- * \param data payload to pass to \p cmd (optional).
+ * \param payload \c JsonObject to send as message data.
  *
  * \return \c true on success, else \c false.
  */
