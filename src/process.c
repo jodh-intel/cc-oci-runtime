@@ -224,19 +224,6 @@ cc_oci_hook_watcher(GPid pid, gint status, gpointer exit_code) {
 	g_main_loop_quit(hook_loop);
 }
 
-// FIXME
-#if 0
-gboolean timeout_func (gpointer user_data)
-{
-	(void)user_data;
-
-	g_critical ("FIXME:%s:%d: ", __func__, __LINE__);
-
-	// don't re-register
-	return true;
-}
-#endif
-
 /*!
  * Handle processes output streams
  * \param channel GIOChannel
@@ -394,14 +381,6 @@ cc_run_hook(struct oci_cfg_hook* hook, const gchar* state,
 
 	/* add watcher to hook */
 	g_child_watch_add(pid, cc_oci_hook_watcher, &hook_exit_code);
-
-/* FIXME */
-#if 0
-	if (1) {
-		//g_timeout_add_seconds (1, timeout_func, NULL);
-		g_idle_add (timeout_func, NULL);
-	}
-#endif
 
 	/* create output channels */
 	out_ch = g_io_channel_unix_new(std_out);
