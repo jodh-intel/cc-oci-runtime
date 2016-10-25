@@ -603,7 +603,7 @@ out:
  *
  * \return \c true on success, else \c false.
  */
-static gboolean
+gboolean
 cc_proxy_cmd_bye (struct cc_proxy *proxy)
 {
 	JsonObject        *obj = NULL;
