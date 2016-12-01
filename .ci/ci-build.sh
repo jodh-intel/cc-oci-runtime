@@ -61,7 +61,7 @@ fi
  eval ../"$tarball_dir"/configure "$configure_opts" \
  && make -j5 CFLAGS="-Werror -Wno-error=pedantic" \
  && sudo make install \
- && make check)
+ && chronic make check)
 
 # go checks
 export go_packages=$(go list ./... | grep -v cc-oci-runtime/vendor |\
