@@ -61,6 +61,7 @@ GENERATED_FILES = \
 	data/dockerFiles/Dockerfile.ubuntu \
 	data/vm.json \
 	tests/functional/common.bash \
+	tests/lib/test-common.bash \
 	tests/functional/data/config-minimal-cc-oci.json \
 	tests/metrics/density/docker_cpu_usage.sh \
 	tests/metrics/density/docker_memory_usage.sh \
