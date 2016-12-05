@@ -42,9 +42,9 @@ setup() {
 @test "Volume - use volume in a container" {
 	testFile='hello_world'
 	containerPath='/attached_vol'
-	run bash -c "$DOCKER_EXE run -i -v $volName:$containerPath busybox touch $containerPath/$testFile"
+	run bash -c "$DOCKER_EXE run -ti -v $volName:$containerPath busybox touch $containerPath/$testFile"
 	[ $status -eq 0 ]
-	run bash -c "$DOCKER_EXE run -i -v $volName:$containerPath busybox ls $containerPath | grep $testFile"
+	run bash -c "$DOCKER_EXE run -ti -v $volName:$containerPath busybox ls $containerPath | grep $testFile"
 	$DOCKER_EXE rm $($DOCKER_EXE ps -qa)
 	[ $status -eq 0 ]
 }
@@ -55,7 +55,7 @@ setup() {
 	containerPath="/root/sharedSpace"
 	mkdir "$dir_path"
 	touch "$dir_path/$test_file"
-	run bash -c "$DOCKER_EXE run -i -v $dir_path:$containerPath busybox ls $containerPath | grep $test_file"
+	run bash -c "$DOCKER_EXE run -ti -v $dir_path:$containerPath busybox ls $containerPath | grep $test_file"
 	rm -r "$dir_path"
 	$DOCKER_EXE rm $($DOCKER_EXE ps -qa)
 	[ $status -eq 0 ]
@@ -67,7 +67,7 @@ setup() {
 	file_content="bar"
 	echo "$file_content" >  "$test_file"
 	containerPath="/root/foo"
-	run bash -c "$DOCKER_EXE run -i -v $test_file:$containerPath busybox cat $containerPath | grep $file_content"
+	run bash -c "$DOCKER_EXE run -ti -v $test_file:$containerPath busybox cat $containerPath | grep $file_content"
 	rm "$test_file"
 	$DOCKER_EXE rm $($DOCKER_EXE ps -qa)
 	[ $status -eq 0 ]

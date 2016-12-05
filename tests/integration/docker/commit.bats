@@ -30,13 +30,13 @@ setup() {
 }
 
 @test "Commit a container" {
-	$DOCKER_EXE run -i --name container1 busybox /bin/sh -c "echo hello"
+	$DOCKER_EXE run -ti --name container1 busybox /bin/sh -c "echo hello"
 	$DOCKER_EXE commit -m "test_commit" container1 container/test-container
 	$DOCKER_EXE rmi container/test-container
 }
 
 @test "Commit a container with new configurations" {
-	$DOCKER_EXE run -i --name container2 busybox /bin/sh -c "echo hello"
+	$DOCKER_EXE run -ti --name container2 busybox /bin/sh -c "echo hello"
 	$DOCKER_EXE inspect -f "{{ .Config.Env }}" container2
 	$DOCKER_EXE commit --change "ENV DEBUG true" container2 test/container-test
 	$DOCKER_EXE rmi test/container-test

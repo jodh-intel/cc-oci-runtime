@@ -38,5 +38,5 @@ setup() {
 	contName='pingTest'
 	$DOCKER_EXE run -tid --name "$contName" ubuntu bash
 	ip_addr=$($DOCKER_EXE inspect --format '{{ .NetworkSettings.IPAddress }}' "$contName")
-	$DOCKER_EXE run -i debian ping -c 1 "$ip_addr" | grep -q '1 packets received'
+	$DOCKER_EXE run -ti debian ping -c 1 "$ip_addr" | grep -q '1 packets received'
 }
