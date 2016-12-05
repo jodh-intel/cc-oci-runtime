@@ -35,6 +35,9 @@ setup() {
 }
 
 @test "Verify connectivity between 2 containers" {
+
+	cor_ci_env && skip "test hangs SemaphoreCI"
+
 	contName='pingTest'
 	$DOCKER_EXE run -tid --name "$contName" ubuntu bash
 	ip_addr=$($DOCKER_EXE inspect --format '{{ .NetworkSettings.IPAddress }}' "$contName")
