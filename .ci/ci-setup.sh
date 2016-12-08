@@ -51,18 +51,27 @@ fi
 #
 
 go_tarball="go${go_version}.linux-amd64.tar.gz"
-curl -L -O "https://storage.googleapis.com/golang/$go_tarball"
-tar xvf $go_tarball 1>/dev/null
-mv go $GOROOT
+
+if [ ! -d "$GOROOT/go" ]
+then
+    curl -L -O "https://storage.googleapis.com/golang/$go_tarball"
+    tar xvf "$go_tarball" 1>/dev/null
+    mv go "$GOROOT"
+fi
+
 # Unfortunately, go doesn't support vendoring outside of GOPATH (maybe in 1.8?)
 # So, we setup a GOPATH tree with our vendored dependencies.
 # See: https://github.com/golang/go/issues/14566
 mkdir -p "$GOPATH/src"
+
+# Always copy the runtimes vendor directory
 cp -r vendor/* "$GOPATH/src"
+
 # We also need to put the runtime into its right place in the GOPATH so we can
 # self-import internal packages
 mkdir -p "$GOPATH/src/github.com/01org/"
-ln -s $PWD "$GOPATH/src/github.com/01org/"
+base=$(basename "$PWD")
+[ ! -e "$GOPATH/src/github.com/01org/$base" ] && ln -s $PWD "$GOPATH/src/github.com/01org/"
 
 go get github.com/fzipp/gocyclo
 go get github.com/client9/misspell/cmd/misspell
