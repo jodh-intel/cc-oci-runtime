@@ -67,10 +67,10 @@ Run all the tests (unit tests, functional, valgrind)::
 
 Only run functional tests::
 
-    $ make functional-test
+    $ make functional-tests
 
-To Run a specific tests is needed to use run-bats.sh script 
-to run with network namespace unshared (done by docker); 
+To run a specific tests is needed to use run-bats.sh script
+to run with network namespace unshared (done by docker);
 otherwise cc-oci-runtime will set container network using host interaces::
 
     $ bash ./data/run-bats.sh tests/functional/test-name.bats
