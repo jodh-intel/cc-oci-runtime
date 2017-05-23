@@ -23,9 +23,32 @@
 #   should be aborted.
 #---------------------------------------------------------------------
 
-set -e
-
 repo="github.com/clearcontainers/tests/cmd/checkcommits"
 go get -u "$repo"
 
+#---------------------------------------------------------------------
+# FIXME: debug
+
+set -x
+env
+pwd
+ls -al
+git status
+git branch
+git remote -v
+git --no-pager log -5
+
+git rev-list --reverse master..HEAD
+git rev-list --reverse master..
+
+git rev-list --no-merges --reverse master..HEAD
+git rev-list --no-merges --reverse master..
+
+git remote -v
+git reflog
+
+#---------------------------------------------------------------------
+
 checkcommits --verbose --need-fixes --need-sign-offs
+
+#---------------------------------------------------------------------
